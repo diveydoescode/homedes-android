@@ -1,0 +1,162 @@
+{
+  "sofa.svg": {
+    "category": "sofa",
+    "source_block": "sofa-single-seat",
+    "block_size_mm": [
+      748.08,
+      583.22
+    ]
+  },
+  "sofa_l.svg": {
+    "category": "sofa_l",
+    "source_block": "sofa-6-corner-seater",
+    "block_size_mm": [
+      1642.12,
+      2098.76
+    ]
+  },
+  "armchair.svg": {
+    "category": "armchair",
+    "source_block": "poltrona-frau-highback-armchair",
+    "block_size_mm": [
+      36.4,
+      33.32
+    ]
+  },
+  "chair.svg": {
+    "category": "chair",
+    "source_block": "chair-plan-view",
+    "block_size_mm": [
+      600.0,
+      550.0
+    ]
+  },
+  "stool.svg": {
+    "category": "stool",
+    "source_block": "poltrona-frau-ottoman",
+    "block_size_mm": [
+      23.59,
+      27.3
+    ]
+  },
+  "table.svg": {
+    "category": "table",
+    "source_block": "dining-table-plan",
+    "block_size_mm": [
+      2199.8,
+      1800.0
+    ]
+  },
+  "desk.svg": {
+    "category": "desk",
+    "source_block": "rectangular-desk-plan",
+    "block_size_mm": [
+      2400.0,
+      840.0
+    ]
+  },
+  "bed.svg": {
+    "category": "bed",
+    "source_block": "king-size-bed-plan",
+    "block_size_mm": [
+      2000.0,
+      1400.0
+    ]
+  },
+  "wardrobe.svg": {
+    "category": "wardrobe",
+    "source_block": "900x400-cupboard",
+    "block_size_mm": [
+      900.0,
+      848.22
+    ]
+  },
+  "stove.svg": {
+    "category": "stove",
+    "source_block": "gas-stove-plan-view",
+    "block_size_mm": [
+      585.0,
+      515.0
+    ]
+  },
+  "sink.svg": {
+    "category": "sink",
+    "source_block": "cleaners-sink-plan",
+    "block_size_mm": [
+      640.0,
+      480.0
+    ]
+  },
+  "vanity.svg": {
+    "category": "vanity",
+    "source_block": "vanity-unit-with-sink",
+    "block_size_mm": [
+      48.0,
+      24.0
+    ]
+  },
+  "shower.svg": {
+    "category": "shower",
+    "source_block": "a-dynamic-block-of-a-shower",
+    "block_size_mm": [
+      900.0,
+      900.0
+    ]
+  },
+  "bath.svg": {
+    "category": "bath",
+    "source_block": "bathtub-type-3",
+    "block_size_mm": [
+      1699.95,
+      830.14
+    ]
+  },
+  "toilet.svg": {
+    "category": "toilet",
+    "source_block": "toilet-wc-type-2",
+    "block_size_mm": [
+      665.03,
+      849.19
+    ]
+  },
+  "plant.svg": {
+    "category": "plant",
+    "source_block": "plant-plan-view",
+    "block_size_mm": [
+      1042.49,
+      1023.68
+    ]
+  },
+  "bookcase.svg": {
+    "category": "bookcase",
+    "source_block": "bookshelf-plan-view",
+    "block_size_mm": [
+      850.0,
+      384.54
+    ]
+  },
+  "door.svg": {
+    "category": "door",
+    "source_block": "a-dynamic-block-of-a-door-in-plan-view",
+    "block_size_mm": [
+      900.0,
+      910.0
+    ]
+  },
+  "window.svg": {
+    "category": "window",
+    "source_block": "window-plan-brick-veneer-dynamic-block",
+    "block_size_mm": [
+      3060.0,
+      300.0
+    ]
+  },
+  "bay_window.svg": {
+    "category": "bay_window",
+    "source_block": "bay-window",
+    "block_size_mm": [
+      115.1,
+      43.22
+    ]
+  }
+}
