@@ -80,6 +80,18 @@ Copied from `homedes-webapp/public/`.
 - `docs/WEB_TO_ANDROID_MAPPING.md` — web → Android screen/API map
 - `docs/superpowers/specs/2026-03-24-homedes-android-design.md` — Stage 1 design
 
-## Status
+## Status (verified)
 
-Scaffold + journey UI shell, dashboard/project Room store, editor chrome placeholders, and sketch flow UI (picker → crop → progress → error) with Retrofit `SketchApi` wired for the next integration pass.
+`./gradlew :app:assembleDebug` and `:app:testDebugUnitTest` succeed on this tree.
+
+**Shipped**
+- Journey: Splash, Landing, Onboarding, Setup, Auth (Google stub + skip/email, same as web)
+- Dashboard: search/sort, blank project, open, delete; Room stores `.homedesign` archives + thumbs
+- Editor: plan canvas (grid, rooms, mitered walls, furniture, openings, dims), pan/pinch, select, draw wall, draw room, place catalog furniture, undo/redo, 3s autosave, property sheet, export DXF/PDF/`.homedesign` via FileProvider
+- Domain ports: models, catalog, geom kernel (walls/rooms/openings/snap/hit-test), undo, zip codec
+- Sketch flow UI + Retrofit client → `https://homedes-webapp.vercel.app/api/sketch` (override with `sketch.base.url`)
+
+**Notes**
+- If Vercel `/api/sketch` returns 404, set `sketch.base.url` to a working proxy (or your local `server/proxy.mjs`). The UI still runs; convert needs a live backend.
+- Some advanced web geom modules are deferred (full curve mutation, furniture arrange/align, full DXF R2018 shell parity). See mapping doc.
+- Dark theme follows system / DataStore preference using HD editorial + architect tokens.
