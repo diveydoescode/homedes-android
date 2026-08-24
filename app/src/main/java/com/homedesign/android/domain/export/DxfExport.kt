@@ -1,21 +1,25 @@
 package com.homedesign.android.domain.export
 
+import com.homedesign.android.domain.geom.FurnitureGeometry
 import com.homedesign.android.domain.geom.RoomGeometry
 import com.homedesign.android.domain.geom.WallGeometry
 import com.homedesign.android.domain.model.Home
 import com.homedesign.android.domain.model.UnitFormat
 import com.homedesign.android.domain.model.UnitSystem
+import kotlin.math.PI
+
 private const val DXF_MM_SCALE = 10.0
 
 /**
- * Minimal but valid R12-style ASCII DXF: HEADER extents + TABLES layers +
- * ENTITIES (wall outlines, room polylines, room labels).
- * Plan cm → mm ×10; Y flipped about plan max-Y (Y-up DXF).
+ * R12-style ASCII DXF with web-parity layer names: walls, rooms, room labels,
+ * furniture footprints, openings (OpeningSymbol), dimensions, title.
+ * Plan cm → mm ×10; Y flipped about plan max-Y.
  */
 fun exportDXF(
     home: Home,
     unitSystem: UnitSystem = UnitSystem.Millimetre,
 ): ExportFile? {
+    val home = healForExport(home)
     val levelId = home.selectedLevelID
     val bounds = computePlanBounds(home, levelId) ?: return null
     val yRef = bounds.maxY
@@ -29,6 +33,11 @@ fun exportDXF(
 
     val walls = home.walls.filter { levelId == null || it.level == levelId }
     val rooms = home.rooms.filter { levelId == null || it.level == levelId }
+    val furniture = home.furniture.filter {
+        (levelId == null || it.level == levelId) && it.visible
+    }
+    val dws = home.doorsAndWindows.filter { levelId == null || it.piece.level == levelId }
+    val dims = home.dimensionLines.filter { levelId == null || it.level == levelId }
 
     var minX = Double.POSITIVE_INFINITY
     var minY = Double.POSITIVE_INFINITY
@@ -77,6 +86,25 @@ fun exportDXF(
         ePair(1, text)
     }
 
+    fun addArc(
+        cx: Double,
+        cy: Double,
+        radius: Double,
+        startDeg: Double,
+        endDeg: Double,
+        layer: String,
+    ) {
+        if (radius <= 0) return
+        grow(cx - radius, cy - radius)
+        grow(cx + radius, cy + radius)
+        ePair(0, "ARC")
+        ePair(8, layer)
+        ePair(10, fmt(cx)); ePair(20, fmt(cy)); ePair(30, "0.0")
+        ePair(40, fmt(radius))
+        ePair(50, fmt(startDeg))
+        ePair(51, fmt(endDeg))
+    }
+
     for (wall in walls) {
         val outline = WallGeometry.unjoinedOutline(wall)
         val pts = outline.map { fx(it.x) to fy(it.y) }
@@ -87,15 +115,59 @@ fun exportDXF(
         if (room.points.size < 3) continue
         val pts = room.points.map { fx(it.x) to fy(it.y) }
         addLwPolyline(pts, "ROOMS", closed = true)
+        val lines = roomLabelLines(room, unitSystem)
+        if (lines.isEmpty()) continue
         val c = RoomGeometry.centroid(room)
-        val areaM2 = RoomGeometry.polygonArea(room) / 10_000.0
-        val label = buildString {
-            room.name?.takeIf { it.isNotBlank() }?.let { append(it) }
-            if (isNotEmpty()) append('\n')
-            append(UnitFormat.area(areaM2, unitSystem))
-        }
-        addText(label.replace('\n', ' '), fx(c.x), fy(c.y), 220.0, "ROOM_LABELS")
+        addText(lines.joinToString(" "), fx(c.x), fy(c.y), 220.0, "ROOM_LABELS")
     }
+
+    for (piece in furniture) {
+        val pts = FurnitureGeometry.cornerPoints(piece).map { fx(it.x) to fy(it.y) }
+        addLwPolyline(pts, "FURNITURE", closed = true)
+        addText(piece.name ?: "", fx(piece.x), fy(piece.y), 150.0, "FURN_LABELS")
+    }
+
+    for (item in collectOpeningDrawItems(dws, walls)) {
+        for (line in item.lines) {
+            addLine(
+                fx(line.start.x), fy(line.start.y),
+                fx(line.end.x), fy(line.end.y),
+                "DOORS_WINDOWS",
+            )
+        }
+        for (arc in item.arcs) {
+            // Y-flip reverses arc direction; negate angles and swap.
+            val startDeg = -arc.endAngle * 180.0 / PI
+            val endDeg = -arc.startAngle * 180.0 / PI
+            addArc(
+                fx(arc.center.x),
+                fy(arc.center.y),
+                arc.radius * DXF_MM_SCALE,
+                startDeg,
+                endDeg,
+                "DOORS_WINDOWS",
+            )
+        }
+    }
+
+    for (dim in dims) {
+        val pts = dimensionPoints(dim)
+        if (pts.size != 4) continue
+        addLine(fx(pts[0].x), fy(pts[0].y), fx(pts[2].x), fy(pts[2].y), "A-DIMS")
+        addLine(fx(pts[1].x), fy(pts[1].y), fx(pts[3].x), fy(pts[3].y), "A-DIMS")
+        addLine(fx(pts[2].x), fy(pts[2].y), fx(pts[3].x), fy(pts[3].y), "A-DIMS")
+        val mx = (pts[2].x + pts[3].x) / 2.0
+        val my = (pts[2].y + pts[3].y) / 2.0
+        addText(UnitFormat.length(dimLengthCM(dim), unitSystem), fx(mx), fy(my), 150.0, "A-DIMS")
+    }
+
+    addText(
+        sheetTitle(home, levelId),
+        fx(bounds.minX),
+        fy(bounds.minY) + 700.0,
+        350.0,
+        "TITLE",
+    )
 
     if (minX.isInfinite()) {
         minX = 0.0; minY = 0.0; maxX = 1.0; maxY = 1.0
@@ -108,13 +180,8 @@ fun exportDXF(
     pair(0, "ENDSEC")
 
     pair(0, "SECTION"); pair(2, "TABLES")
-    pair(0, "TABLE"); pair(2, "LAYER"); pair(70, "4")
-    for ((name, color) in listOf(
-        "WALLS" to 7,
-        "ROOMS" to 8,
-        "ROOM_LABELS" to 7,
-        "0" to 7,
-    )) {
+    pair(0, "TABLE"); pair(2, "LAYER"); pair(70, DXF_LAYER_SPECS.size.toString())
+    for ((name, color) in DXF_LAYER_SPECS) {
         pair(0, "LAYER"); pair(2, name); pair(70, "0"); pair(62, color.toString()); pair(6, "CONTINUOUS")
     }
     pair(0, "ENDTAB")

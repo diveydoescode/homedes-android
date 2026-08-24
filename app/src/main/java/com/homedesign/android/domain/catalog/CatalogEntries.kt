@@ -22,7 +22,8 @@ private fun e(
     icon = icon,
 )
 
-val CATALOG_ENTRIES: List<CatalogEntry> = listOf(
+/** Built-in Stage-1 subset; replaced at runtime when `assets/catalog/generic.json` loads. */
+private val BUILTIN_CATALOG_ENTRIES: List<CatalogEntry> = listOf(
     e("Blend Swap CC-0#bed1", "Bed", "Bedroom", 140.7, 208.0, 95.5, icon = "svg/bed.svg"),
     e("Blend Swap CC-0#bedsideTable2", "Bedside table", "Bedroom", 48.55, 48.1, 45.4),
     e("Geantick#dresser", "Dresser", "Bedroom", 138.5, 45.5, 62.0),
@@ -131,6 +132,25 @@ val FURNITURE_CATEGORIES = listOf(
     "Storage",
     "Lighting",
     "Decor",
+    "Office",
+    "Exterior",
+    "Miscellaneous",
+    "Staircases",
+    "Vehicles",
+    "Characters",
+    "eTeks",
 )
 
-fun catalogById(id: String): CatalogEntry? = CATALOG_ENTRIES.find { it.id == id }
+@Volatile
+private var catalogEntriesCache: List<CatalogEntry> = BUILTIN_CATALOG_ENTRIES
+
+/** Active catalog (builtin until [installCatalogEntries] runs). */
+val CATALOG_ENTRIES: List<CatalogEntry>
+    get() = catalogEntriesCache
+
+fun installCatalogEntries(entries: List<CatalogEntry>) {
+    if (entries.isEmpty()) return
+    catalogEntriesCache = entries
+}
+
+fun catalogById(id: String): CatalogEntry? = catalogEntriesCache.find { it.id == id }

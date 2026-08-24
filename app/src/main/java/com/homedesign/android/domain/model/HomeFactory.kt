@@ -7,6 +7,7 @@ object HomeFactory {
 
     private fun synthesisedLevel(): Level = Level(
         id = SYNTH_LEVEL_ID,
+        name = "Ground floor",
         elevation = 0.0,
         floorThickness = DEFAULT_FLOOR_THICKNESS_CM,
         height = DEFAULT_WALL_HEIGHT_CM,

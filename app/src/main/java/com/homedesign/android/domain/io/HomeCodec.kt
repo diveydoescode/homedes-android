@@ -14,7 +14,6 @@ private val RUNTIME_HOME_KEYS = setOf(
     "topologyVersion",
     "furnitureRevision",
     "styleVersion",
-    "extractedAssetURLs",
 )
 
 /** Drop null-valued object properties (Swift decodeIfPresent parity). */
@@ -47,7 +46,6 @@ fun decodeHome(data: String): Home {
         topologyVersion = 0,
         furnitureRevision = 0,
         styleVersion = 0,
-        extractedAssetURLs = emptyMap(),
     )
 }
 

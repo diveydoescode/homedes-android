@@ -1,5 +1,6 @@
 package com.homedesign.android.domain.export
 
+import com.homedesign.android.domain.geom.FurnitureGeometry
 import com.homedesign.android.domain.geom.RoomGeometry
 import com.homedesign.android.domain.geom.WallGeometry
 import com.homedesign.android.domain.model.Home
@@ -58,13 +59,14 @@ private fun deflate(data: ByteArray): ByteArray {
 }
 
 /**
- * Minimal PDF 1.4: one A4 landscape page with wall outlines, room fills,
- * title, and 1 m scale bar. Content stream is FlateDecode-compressed.
+ * Contractor-style PDF 1.4: A4 landscape with title block, rooms, walls,
+ * openings (OpeningSymbol art), furniture footprints, dimensions, 1 m scale bar.
  */
 fun exportPDF(
     home: Home,
     unitSystem: UnitSystem = UnitSystem.Metric,
 ): ExportFile? {
+    val home = healForExport(home)
     val levelId = home.selectedLevelID
     val bounds = computePlanBounds(home, levelId) ?: return null
     val yRef = bounds.maxY
@@ -99,6 +101,7 @@ fun exportPDF(
     }
 
     fun text(str: String, x: Double, y: Double, size: Double, bold: Boolean) {
+        if (str.isBlank()) return
         val font = if (bold) "F2" else "F1"
         op("BT")
         op("/$font ${n(size)} Tf")
@@ -107,11 +110,11 @@ fun exportPDF(
         op("ET")
     }
 
-    val title = home.name?.takeIf { it.isNotBlank() } ?: "Plan"
+    // Title block
     setStrokeRGB(0.0, 0.0, 0.0)
     setFillRGB(0.0, 0.0, 0.0)
     setLineWidth(1.0)
-    text(title, MARGIN, PAGE_HEIGHT - 32, 14.0, true)
+    text(sheetTitle(home, levelId), MARGIN, PAGE_HEIGHT - 32, 14.0, true)
 
     val metre = 100.0 * scale
     val barY = 24.0
@@ -137,13 +140,19 @@ fun exportPDF(
         setLineWidth(0.4)
         polyline(pts, true)
         stroke()
+        val lines = roomLabelLines(room, unitSystem)
+        if (lines.isEmpty()) continue
         val c = RoomGeometry.centroid(room)
-        val areaM2 = RoomGeometry.polygonArea(room) / 10_000.0
+        val cx = fx(c.x)
+        val cy = fy(c.y)
         setFillRGB(0.1, 0.1, 0.15)
-        room.name?.takeIf { it.isNotBlank() }?.let {
-            text(it, fx(c.x), fy(c.y) + 8, 10.0, true)
+        val size = 10.0
+        if (lines.size == 1) {
+            text(lines[0], cx, cy, size, false)
+        } else {
+            text(lines[0], cx, cy + size * 0.65, size, true)
+            text(lines[1], cx, cy - size * 0.55, size, false)
         }
-        text(UnitFormat.area(areaM2, unitSystem), fx(c.x), fy(c.y) - 6, 9.0, false)
     }
 
     val walls = home.walls.filter { levelId == null || it.level == levelId }
@@ -159,10 +168,59 @@ fun exportPDF(
         stroke()
     }
 
+    // Openings
+    val dws = home.doorsAndWindows.filter { levelId == null || it.piece.level == levelId }
+    setStrokeRGB(0.55, 0.12, 0.12)
+    setFillRGB(0.55, 0.12, 0.12)
+    setLineWidth(0.7)
+    for (item in collectOpeningDrawItems(dws, walls)) {
+        for (line in item.lines) {
+            moveTo(fx(line.start.x), fy(line.start.y))
+            lineTo(fx(line.end.x), fy(line.end.y))
+            stroke()
+        }
+        for (arc in item.arcs) {
+            val samples = sampleSashArc(arc)
+            if (samples.size < 2) continue
+            polyline(samples.map { fx(it.x) to fy(it.y) }, false)
+            stroke()
+        }
+    }
+
+    // Furniture footprints + labels
+    val furniture = home.furniture.filter {
+        (levelId == null || it.level == levelId) && it.visible
+    }
+    setStrokeRGB(0.12, 0.38, 0.18)
+    setFillRGB(0.12, 0.12, 0.12)
+    setLineWidth(0.65)
+    for (piece in furniture) {
+        val corners = FurnitureGeometry.cornerPoints(piece).map { fx(it.x) to fy(it.y) }
+        polyline(corners, true)
+        stroke()
+        text(piece.name ?: "", fx(piece.x), fy(piece.y), 8.0, false)
+    }
+
+    // Dimensions
+    val dims = home.dimensionLines.filter { levelId == null || it.level == levelId }
+    setStrokeRGB(0.25, 0.25, 0.28)
+    setFillRGB(0.25, 0.25, 0.28)
+    setLineWidth(0.5)
+    for (dim in dims) {
+        val pts = dimensionPoints(dim)
+        if (pts.size != 4) continue
+        // extension ticks + dimension line
+        moveTo(fx(pts[0].x), fy(pts[0].y)); lineTo(fx(pts[2].x), fy(pts[2].y)); stroke()
+        moveTo(fx(pts[1].x), fy(pts[1].y)); lineTo(fx(pts[3].x), fy(pts[3].y)); stroke()
+        moveTo(fx(pts[2].x), fy(pts[2].y)); lineTo(fx(pts[3].x), fy(pts[3].y)); stroke()
+        val mx = (pts[2].x + pts[3].x) / 2.0
+        val my = (pts[2].y + pts[3].y) / 2.0
+        text(UnitFormat.length(dimLengthCM(dim), unitSystem), fx(mx), fy(my), 8.0, false)
+    }
+
     val contentBytes = ops.toString().toByteArray(Charsets.ISO_8859_1)
     val compressed = deflate(contentBytes)
 
-    // Object IDs: 1=Catalog 2=Pages 3=Page 4=Content 5=F1 6=F2 7=ExtGState
     val parts = ArrayList<ByteArray>(8)
 
     fun obj(body: ByteArray): Int {
@@ -181,7 +239,6 @@ fun exportPDF(
     val streamFooter = "\nendstream".toByteArray(Charsets.ISO_8859_1)
     val contentId = obj(streamHeader + compressed + streamFooter)
 
-    // Placeholder then fix pages/page cross-refs after allocation
     val pagesId = obj("PLACEHOLDER")
     val pageId = obj("PLACEHOLDER")
     parts[pagesId - 1] = "<< /Type /Pages /Kids [$pageId 0 R] /Count 1 >>"

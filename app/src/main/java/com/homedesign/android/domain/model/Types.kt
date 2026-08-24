@@ -91,8 +91,12 @@ data class Home(
     @Transient val furnitureRevision: Int = 0,
     /** Runtime only — never persist. Bump on paint/texture. */
     @Transient val styleVersion: Int = 0,
-    /** Runtime only — never persist. handle → asset URL/path. */
-    @Transient val extractedAssetURLs: Map<String, String> = emptyMap(),
+    /**
+     * SH3D (and similar) extracted asset handle → absolute file path.
+     * Android persists file paths so Filament can reload OBJ after save;
+     * web object-URLs should not be written here.
+     */
+    val extractedAssetURLs: Map<String, String> = emptyMap(),
 )
 
 @Serializable
@@ -205,6 +209,11 @@ data class HomePieceOfFurniture(
     val lightPower: Double? = null,
     val lightSources: List<LightSource>? = null,
     val lightColor: String? = null,
+    /**
+     * Absolute path to extracted OBJ (or sniffed mesh) from SH3D import.
+     * Persisted on Android so 3D can reload after project save; absent → procedural.
+     */
+    val modelURL: String? = null,
 )
 
 @Serializable
