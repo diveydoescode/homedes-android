@@ -1,0 +1,25 @@
+# Project MCP + permissions for HomeDesign Android agent automation.
+# Priority: this file overrides ~/.grok/config.toml for matching server names.
+
+[mcp]
+max_output_bytes = 80000
+
+[mcp_servers.homedes-adb]
+command = "node"
+args = [
+  "C:/webapp_android/homedes-android/tools/homedes-adb-mcp/src/index.mjs",
+]
+cwd = "C:/webapp_android/homedes-android/tools/homedes-adb-mcp"
+enabled = true
+startup_timeout_sec = 45
+tool_timeout_sec = 900
+env = { JAVA_HOME = "C:\\Program Files\\Microsoft\\jdk-17.0.20.101-hotspot", ANDROID_HOME = "C:\\Users\\itsne\\AppData\\Local\\Android\\Sdk" }
+
+# Allow agent to drive local device automation without friction.
+[permission]
+allow = [
+  "Bash(adb *)",
+  "Bash(*gradlew*)",
+  "Bash(*homedes-android/scripts*)",
+  "Bash(*homedes-adb-mcp*)",
+]

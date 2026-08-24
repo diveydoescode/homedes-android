@@ -18,6 +18,11 @@ out/
 release/
 *.log
 *.hprof
+/artifacts/
+tools/**/node_modules/
+compile*.txt
+test_out.txt
+_sh3d_inspect/
 .navigation/
 captures/
 output.json
