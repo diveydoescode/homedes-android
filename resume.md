@@ -283,6 +283,10 @@ From web `AGENTS.md` — keep identical on Android:
 
 Whenever a Tier 1/2/3 checkbox is completed (or scope changes), **update this file in the same PR/commit** so `read resume.md` stays accurate. Keep **§0** as the mandatory session opener.
 
+### Commit hygiene (ongoing)
+
+Keep a readable history: small thematic commits with Conventional Commit subjects (`feat(scope):`, `fix(scope):`, `chore(tooling):`, `docs:`, `build:`, `test:`). Prefer path-scoped commits over giant dumps. Do **not** amend pushed commits; do **not** commit secrets (`local.properties`, API keys). Author on this repo has been `diveydoescode <divey@users.noreply.github.com>`.
+
 ---
 
 ## 12. Remaining — what’s left
