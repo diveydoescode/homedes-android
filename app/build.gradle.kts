@@ -16,9 +16,16 @@ val localProperties = Properties().apply {
     }
 }
 
-val sketchBaseUrl: String =
+/** Production proxy origin — always used for release; never overridden by local.properties. */
+val productionSketchUrl = "https://homedes-webapp.vercel.app"
+
+/**
+ * Debug default: emulator loopback to host `scripts/run-sketch-proxy.ps1` (:8787).
+ * Override with `sketch.base.url` in local.properties (physical device LAN IP, etc.).
+ */
+val debugSketchUrl: String =
     localProperties.getProperty("sketch.base.url")
-        ?: "https://homedes-webapp.vercel.app"
+        ?: "http://10.0.2.2:8787"
 
 android {
     namespace = "com.homedesign.android"
@@ -33,7 +40,8 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
-        buildConfigField("String", "SKETCH_BASE_URL", "\"$sketchBaseUrl\"")
+        // Fallback; buildTypes below set the real value per variant.
+        buildConfigField("String", "SKETCH_BASE_URL", "\"$productionSketchUrl\"")
     }
 
     buildTypes {
@@ -43,10 +51,13 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
             )
+            // Release always ships the production origin (ignore local.properties).
+            buildConfigField("String", "SKETCH_BASE_URL", "\"$productionSketchUrl\"")
         }
         debug {
             applicationIdSuffix = ".debug"
             versionNameSuffix = "-debug"
+            buildConfigField("String", "SKETCH_BASE_URL", "\"$debugSketchUrl\"")
         }
     }
 
@@ -68,6 +79,10 @@ android {
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
+        }
+        jniLibs {
+            // Filament ships libc++_shared; pick first if another AAR also includes it.
+            pickFirsts += "**/libc++_shared.so"
         }
     }
 }
@@ -110,9 +125,24 @@ dependencies {
     ksp("androidx.room:room-compiler:2.6.1")
 
     implementation("androidx.datastore:datastore-preferences:1.1.1")
+    implementation("androidx.exifinterface:exifinterface:1.3.7")
 
     implementation("io.coil-kt:coil-compose:2.7.0")
     implementation("io.coil-kt:coil-svg:2.7.0")
+
+    // Tier 3 — Filament 3D renderer (walls + floors extrusion in Plan3DView)
+    implementation("com.google.android.filament:filament-android:1.56.0")
+    implementation("com.google.android.filament:filament-utils-android:1.56.0")
+    implementation("com.google.android.filament:filamat-android:1.56.0")
+
+    // Tier 3 AR — ARCore + GLES (not SceneView: it pins Filament ≠ 1.56)
+    implementation("com.google.ar:core:1.48.0")
+    // Fallback when ARCore unsupported: CameraX preview + overlay simulation
+    val cameraX = "1.4.1"
+    implementation("androidx.camera:camera-core:$cameraX")
+    implementation("androidx.camera:camera-camera2:$cameraX")
+    implementation("androidx.camera:camera-lifecycle:$cameraX")
+    implementation("androidx.camera:camera-view:$cameraX")
 
     testImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test.ext:junit:1.2.1")
