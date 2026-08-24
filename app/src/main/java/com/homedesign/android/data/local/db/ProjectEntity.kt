@@ -26,6 +26,7 @@ data class ProjectEntity(
         wallCount = wallCount,
         levelCount = levelCount,
         floorAreaM2 = floorAreaM2,
+        thumbnailJpeg = thumbnailBlob,
     )
 
     override fun equals(other: Any?): Boolean {

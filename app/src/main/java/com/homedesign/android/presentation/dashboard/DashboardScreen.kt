@@ -1,7 +1,12 @@
 package com.homedesign.android.presentation.dashboard
 
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -25,18 +30,26 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.CameraAlt
+import androidx.compose.material.icons.outlined.FolderOpen
+import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -44,25 +57,39 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
+import com.homedesign.android.core.ui.relativeTime
 import com.homedesign.android.core.ui.theme.HdTheme
+import com.homedesign.android.domain.io.HomedesignZip
+import com.homedesign.android.domain.model.UnitFormat
+import com.homedesign.android.domain.model.UnitSystem
 import com.homedesign.android.domain.project.ProjectMeta
 import com.homedesign.android.domain.project.ProjectRepository
 import com.homedesign.android.domain.settings.SettingsRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
-import java.text.DateFormat
-import java.util.Date
+import dagger.hilt.android.qualifiers.ApplicationContext
+import android.content.Context
 import javax.inject.Inject
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 enum class SortOrder { Recent, Name, Oldest }
 
@@ -71,15 +98,22 @@ data class DashboardUiState(
     val firstName: String = "",
     val search: String = "",
     val sort: SortOrder = SortOrder.Recent,
+    val unitSystem: UnitSystem = UnitSystem.Millimetre,
+    val resumeProjectId: String? = null,
+    val resumeProjectName: String? = null,
 )
 
 @HiltViewModel
 class DashboardViewModel @Inject constructor(
+    @ApplicationContext private val appContext: Context,
     private val projectRepository: ProjectRepository,
-    settingsRepository: SettingsRepository,
+    private val settingsRepository: SettingsRepository,
 ) : ViewModel() {
     private val search = kotlinx.coroutines.flow.MutableStateFlow("")
     private val sort = kotlinx.coroutines.flow.MutableStateFlow(SortOrder.Recent)
+
+    private val _events = MutableSharedFlow<String>(extraBufferCapacity = 4)
+    val events: SharedFlow<String> = _events.asSharedFlow()
 
     val uiState: StateFlow<DashboardUiState> = combine(
         projectRepository.observeProjects(),
@@ -97,11 +131,16 @@ class DashboardViewModel @Inject constructor(
             SortOrder.Name -> filtered.sortedBy { it.name.lowercase() }
             SortOrder.Oldest -> filtered.sortedBy { it.updatedAt }
         }
+        val resumeId = settings.lastProjectId?.takeIf { settings.editorSessionDirty }
+            ?.takeIf { id -> projects.any { it.id == id } }
         DashboardUiState(
             projects = sorted,
             firstName = settings.firstName,
             search = q,
             sort = s,
+            unitSystem = settings.unitSystem,
+            resumeProjectId = resumeId,
+            resumeProjectName = resumeId?.let { id -> projects.find { it.id == id }?.name },
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), DashboardUiState())
 
@@ -120,12 +159,97 @@ class DashboardViewModel @Inject constructor(
         }
     }
 
+    fun openHomedesign(uri: Uri, onOpened: (String) -> Unit) {
+        viewModelScope.launch {
+            try {
+                val bytes = withContext(Dispatchers.IO) {
+                    appContext.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                        ?: error("Could not read file")
+                }
+                val home = HomedesignZip.decode(bytes)
+                val meta = projectRepository.createFromHome(home)
+                onOpened(meta.id)
+            } catch (e: Exception) {
+                _events.tryEmit(e.message ?: "Could not open .homedesign")
+            }
+        }
+    }
+
+    fun rename(id: String, name: String) {
+        viewModelScope.launch { projectRepository.rename(id, name) }
+    }
+
     fun delete(id: String) {
         viewModelScope.launch { projectRepository.delete(id) }
     }
+
+    fun openSh3d(uri: Uri, onOpened: (String) -> Unit) {
+        viewModelScope.launch {
+            try {
+                val bytes = withContext(Dispatchers.IO) {
+                    appContext.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                        ?: error("Could not read file")
+                }
+                val home = withContext(Dispatchers.Default) {
+                    com.homedesign.android.domain.io.SH3DReader.read(
+                        bytes,
+                        // filesDir survives process death; cacheDir can be wiped.
+                        cacheDirectory = java.io.File(appContext.filesDir, "HomeMeshes/${java.util.UUID.randomUUID()}"),
+                    )
+                }
+                val meta = projectRepository.createFromHome(home)
+                onOpened(meta.id)
+            } catch (e: Exception) {
+                _events.tryEmit(e.message ?: "Could not open .sh3d")
+            }
+        }
+    }
+
+    fun openShowcase(onOpened: (String) -> Unit) {
+        viewModelScope.launch {
+            try {
+                val home = withContext(Dispatchers.Default) {
+                    com.homedesign.android.domain.project.ShowcaseVilla.make()
+                }
+                val meta = projectRepository.createFromHome(home)
+                onOpened(meta.id)
+            } catch (e: Exception) {
+                _events.tryEmit(e.message ?: "Could not open showcase")
+            }
+        }
+    }
+
+    fun openSampleSh3d(onOpened: (String) -> Unit) {
+        viewModelScope.launch {
+            try {
+                val bytes = withContext(Dispatchers.IO) {
+                    appContext.assets.open("samples/test_small.sh3d").use { it.readBytes() }
+                }
+                val home = withContext(Dispatchers.Default) {
+                    com.homedesign.android.domain.io.SH3DReader.read(
+                        bytes,
+                        cacheDirectory = java.io.File(appContext.filesDir, "HomeMeshes/${java.util.UUID.randomUUID()}"),
+                    )
+                }
+                val meta = projectRepository.createFromHome(home, name = "Sample plan")
+                onOpened(meta.id)
+            } catch (e: Exception) {
+                _events.tryEmit(e.message ?: "Could not open sample")
+            }
+        }
+    }
+
+    fun dismissResumeSession() {
+        viewModelScope.launch { settingsRepository.clearEditorSession() }
+    }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+private sealed interface ProjectOverlay {
+    data class Info(val meta: ProjectMeta, val draftName: String) : ProjectOverlay
+    data class ConfirmDelete(val meta: ProjectMeta) : ProjectOverlay
+}
+
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun DashboardScreen(
     onOpenProject: (String) -> Unit,
@@ -135,12 +259,33 @@ fun DashboardScreen(
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     var showNewSheet by remember { mutableStateOf(false) }
     var sortMenu by remember { mutableStateOf(false) }
+    var overlay by remember { mutableStateOf<ProjectOverlay?>(null) }
     val sheetState = rememberModalBottomSheetState()
+    val snackbar = remember { SnackbarHostState() }
+
+    val pickHomedesign = rememberLauncherForActivityResult(
+        ActivityResultContracts.GetContent(),
+    ) { uri ->
+        if (uri != null) viewModel.openHomedesign(uri, onOpenProject)
+    }
+    val pickSh3d = rememberLauncherForActivityResult(
+        ActivityResultContracts.GetContent(),
+    ) { uri ->
+        if (uri != null) viewModel.openSh3d(uri, onOpenProject)
+    }
+
+    LaunchedEffect(Unit) {
+        viewModel.events.collect { msg -> snackbar.showSnackbar(msg) }
+    }
 
     val showHero = state.search.isBlank() && state.sort == SortOrder.Recent && state.projects.isNotEmpty()
     val hero = if (showHero) state.projects.first() else null
     val grid = if (hero != null) state.projects.drop(1) else state.projects
     val initial = state.firstName.trim().firstOrNull()?.uppercaseChar()?.toString() ?: "·"
+
+    fun openInfo(meta: ProjectMeta) {
+        overlay = ProjectOverlay.Info(meta, meta.name)
+    }
 
     Box(
         modifier = Modifier
@@ -248,11 +393,44 @@ fun DashboardScreen(
             } else {
                 hero?.let { meta ->
                     item(span = { GridItemSpan(maxLineSpan) }) {
-                        HeroCard(meta = meta, onClick = { onOpenProject(meta.id) })
+                        HeroCard(
+                            meta = meta,
+                            unitSystem = state.unitSystem,
+                            onClick = { onOpenProject(meta.id) },
+                            onLongClick = { openInfo(meta) },
+                            onMore = { openInfo(meta) },
+                        )
+                    }
+                }
+                if (grid.isNotEmpty()) {
+                    item(span = { GridItemSpan(maxLineSpan) }) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            modifier = Modifier.padding(top = 4.dp, bottom = 2.dp),
+                        ) {
+                            Text(
+                                text = "All designs",
+                                style = HdTheme.typography.labelMedium,
+                                color = HdTheme.colors.stone,
+                            )
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(1.dp)
+                                    .background(HdTheme.colors.hairline),
+                            )
+                        }
                     }
                 }
                 items(grid, key = { it.id }) { meta ->
-                    ProjectCard(meta = meta, onClick = { onOpenProject(meta.id) })
+                    ProjectCard(
+                        meta = meta,
+                        unitSystem = state.unitSystem,
+                        onClick = { onOpenProject(meta.id) },
+                        onLongClick = { openInfo(meta) },
+                        onMore = { openInfo(meta) },
+                    )
                 }
             }
         }
@@ -267,6 +445,13 @@ fun DashboardScreen(
         ) {
             Icon(Icons.Outlined.Add, contentDescription = "New design")
         }
+
+        SnackbarHost(
+            hostState = snackbar,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 96.dp),
+        )
     }
 
     if (showNewSheet) {
@@ -288,6 +473,45 @@ fun DashboardScreen(
                 )
                 Spacer(Modifier.height(10.dp))
                 NewActionRow(
+                    title = "Open .homedesign",
+                    subtitle = "Import a plan from storage",
+                    folder = true,
+                    onClick = {
+                        showNewSheet = false
+                        pickHomedesign.launch("*/*")
+                    },
+                )
+                Spacer(Modifier.height(10.dp))
+                NewActionRow(
+                    title = "Open .sh3d",
+                    subtitle = "Import walls, rooms, furniture from archive",
+                    folder = true,
+                    onClick = {
+                        showNewSheet = false
+                        pickSh3d.launch("*/*")
+                    },
+                )
+                Spacer(Modifier.height(10.dp))
+                NewActionRow(
+                    title = "Showcase villa",
+                    subtitle = "Sample plan with curved wall & rooms",
+                    onClick = {
+                        showNewSheet = false
+                        viewModel.openShowcase(onOpenProject)
+                    },
+                )
+                Spacer(Modifier.height(10.dp))
+                NewActionRow(
+                    title = "Sample .sh3d",
+                    subtitle = "Bundled test plan (walls & furniture)",
+                    folder = true,
+                    onClick = {
+                        showNewSheet = false
+                        viewModel.openSampleSh3d(onOpenProject)
+                    },
+                )
+                Spacer(Modifier.height(10.dp))
+                NewActionRow(
                     title = "From sketch",
                     subtitle = "Photograph a hand-drawn plan",
                     icon = true,
@@ -299,6 +523,99 @@ fun DashboardScreen(
                 Spacer(Modifier.height(28.dp))
             }
         }
+    }
+
+    val resumeId = state.resumeProjectId
+    if (resumeId != null) {
+        AlertDialog(
+            onDismissRequest = { viewModel.dismissResumeSession() },
+            title = { Text("Resume editing?", color = HdTheme.colors.ink) },
+            text = {
+                Text(
+                    text = state.resumeProjectName?.let { "“$it” had unsaved changes when you left." }
+                        ?: "A design had unsaved changes when you left.",
+                    color = HdTheme.colors.stone,
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.dismissResumeSession()
+                        onOpenProject(resumeId)
+                    },
+                ) { Text("Resume") }
+            },
+            dismissButton = {
+                TextButton(onClick = { viewModel.dismissResumeSession() }) {
+                    Text("Dismiss")
+                }
+            },
+        )
+    }
+
+    when (val current = overlay) {
+        is ProjectOverlay.Info -> {
+            AlertDialog(
+                onDismissRequest = { overlay = null },
+                title = { Text("Design", color = HdTheme.colors.ink) },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        OutlinedTextField(
+                            value = current.draftName,
+                            onValueChange = { overlay = current.copy(draftName = it) },
+                            label = { Text("Name") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        Text(
+                            text = "${UnitFormat.area(current.meta.floorAreaM2, state.unitSystem)} · updated ${relativeTime(current.meta.updatedAt)}",
+                            style = HdTheme.typography.bodySmall,
+                            color = HdTheme.colors.stone,
+                        )
+                    }
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            viewModel.rename(current.meta.id, current.draftName)
+                            overlay = null
+                        },
+                    ) { Text("Done") }
+                },
+                dismissButton = {
+                    TextButton(
+                        onClick = {
+                            overlay = ProjectOverlay.ConfirmDelete(current.meta)
+                        },
+                    ) {
+                        Text("Delete", color = HdTheme.colors.destructive)
+                    }
+                },
+            )
+        }
+        is ProjectOverlay.ConfirmDelete -> {
+            AlertDialog(
+                onDismissRequest = { overlay = null },
+                title = { Text("Delete design?") },
+                text = {
+                    Text("Delete ${current.meta.name}? This cannot be undone.")
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            viewModel.delete(current.meta.id)
+                            overlay = null
+                        },
+                    ) {
+                        Text("Delete", color = HdTheme.colors.destructive)
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { overlay = null }) { Text("Cancel") }
+                },
+            )
+        }
+        null -> Unit
     }
 }
 
@@ -336,14 +653,21 @@ private fun EmptyDesigns(onStart: () -> Unit) {
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun HeroCard(meta: ProjectMeta, onClick: () -> Unit) {
+private fun HeroCard(
+    meta: ProjectMeta,
+    unitSystem: UnitSystem,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit,
+    onMore: () -> Unit,
+) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(18.dp))
             .background(HdTheme.colors.highlight)
-            .clickable(onClick = onClick)
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
             .padding(16.dp),
     ) {
         Box(
@@ -354,31 +678,59 @@ private fun HeroCard(meta: ProjectMeta, onClick: () -> Unit) {
                 .background(HdTheme.colors.sand),
             contentAlignment = Alignment.Center,
         ) {
-            Text(
-                text = "Plan",
-                style = HdTheme.typography.labelSmall,
-                color = HdTheme.colors.stone,
-                fontStyle = FontStyle.Italic,
-            )
+            PlanThumbImage(meta = meta, modifier = Modifier.fillMaxSize())
+            IconButton(
+                onClick = onMore,
+                modifier = Modifier.align(Alignment.TopEnd),
+            ) {
+                Icon(
+                    Icons.Outlined.MoreVert,
+                    contentDescription = "More for ${meta.name}",
+                    tint = HdTheme.colors.ink,
+                )
+            }
         }
         Spacer(Modifier.height(14.dp))
+        Text(
+            text = "Continue",
+            style = HdTheme.typography.labelMedium,
+            color = HdTheme.colors.terracotta,
+            fontWeight = FontWeight.SemiBold,
+        )
+        Spacer(Modifier.height(4.dp))
         Text(meta.name, style = HdTheme.typography.titleLarge, color = HdTheme.colors.ink)
         Text(
-            text = formatUpdated(meta.updatedAt),
+            text = buildString {
+                append(UnitFormat.area(meta.floorAreaM2, unitSystem))
+                append(" · ")
+                append(relativeTime(meta.updatedAt))
+                if (meta.levelCount > 1) {
+                    append(" · ")
+                    append(meta.levelCount)
+                    append(" floors")
+                }
+            },
             style = HdTheme.typography.bodySmall,
             color = HdTheme.colors.stone,
         )
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun ProjectCard(meta: ProjectMeta, onClick: () -> Unit) {
+private fun ProjectCard(
+    meta: ProjectMeta,
+    unitSystem: UnitSystem,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit,
+    onMore: () -> Unit,
+) {
     Column(
         modifier = Modifier
             .clip(RoundedCornerShape(14.dp))
             .border(1.dp, HdTheme.colors.hairline, RoundedCornerShape(14.dp))
             .background(HdTheme.colors.ivory)
-            .clickable(onClick = onClick)
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
             .padding(10.dp),
     ) {
         Box(
@@ -387,13 +739,60 @@ private fun ProjectCard(meta: ProjectMeta, onClick: () -> Unit) {
                 .aspectRatio(1.15f)
                 .clip(RoundedCornerShape(10.dp))
                 .background(HdTheme.colors.highlight),
-        )
+            contentAlignment = Alignment.Center,
+        ) {
+            PlanThumbImage(meta = meta, modifier = Modifier.fillMaxSize())
+            IconButton(
+                onClick = onMore,
+                modifier = Modifier.align(Alignment.TopEnd),
+            ) {
+                Icon(
+                    Icons.Outlined.MoreVert,
+                    contentDescription = "More for ${meta.name}",
+                    tint = HdTheme.colors.ink,
+                )
+            }
+        }
         Spacer(Modifier.height(10.dp))
         Text(meta.name, style = HdTheme.typography.titleSmall, color = HdTheme.colors.ink, maxLines = 1)
         Text(
-            text = formatUpdated(meta.updatedAt),
+            text = buildString {
+                append(UnitFormat.area(meta.floorAreaM2, unitSystem))
+                append(" · ")
+                append(relativeTime(meta.updatedAt))
+                if (meta.levelCount > 1) {
+                    append(" · ")
+                    append(meta.levelCount)
+                    append(" floors")
+                }
+            },
             style = HdTheme.typography.labelSmall,
             color = HdTheme.colors.stone,
+            maxLines = 2,
+        )
+    }
+}
+
+@Composable
+private fun PlanThumbImage(meta: ProjectMeta, modifier: Modifier = Modifier) {
+    val bytes = meta.thumbnailJpeg
+    if (bytes != null && bytes.isNotEmpty()) {
+        val context = LocalContext.current
+        AsyncImage(
+            model = ImageRequest.Builder(context)
+                .data(bytes)
+                .memoryCacheKey("project-thumb-${meta.id}-${meta.updatedAt}")
+                .build(),
+            contentDescription = "Plan preview for ${meta.name}",
+            contentScale = ContentScale.Crop,
+            modifier = modifier,
+        )
+    } else {
+        Text(
+            text = "Plan",
+            style = HdTheme.typography.labelSmall,
+            color = HdTheme.colors.stone,
+            fontStyle = FontStyle.Italic,
         )
     }
 }
@@ -404,7 +803,13 @@ private fun NewActionRow(
     subtitle: String,
     onClick: () -> Unit,
     icon: Boolean = false,
+    folder: Boolean = false,
 ) {
+    val glyph = when {
+        folder -> Icons.Outlined.FolderOpen
+        icon -> Icons.Outlined.CameraAlt
+        else -> Icons.Outlined.Add
+    }
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -424,7 +829,7 @@ private fun NewActionRow(
             contentAlignment = Alignment.Center,
         ) {
             Icon(
-                imageVector = if (icon) Icons.Outlined.CameraAlt else Icons.Outlined.Add,
+                imageVector = glyph,
                 contentDescription = null,
                 tint = HdTheme.colors.terracotta,
             )
@@ -435,6 +840,3 @@ private fun NewActionRow(
         }
     }
 }
-
-private fun formatUpdated(epochMs: Long): String =
-    DateFormat.getDateInstance(DateFormat.MEDIUM).format(Date(epochMs))

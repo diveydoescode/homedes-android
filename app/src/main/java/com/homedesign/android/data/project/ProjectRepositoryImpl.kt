@@ -2,6 +2,7 @@ package com.homedesign.android.data.project
 
 import com.homedesign.android.data.local.db.ProjectDao
 import com.homedesign.android.data.local.db.ProjectEntity
+import com.homedesign.android.domain.export.PlanThumbnail
 import com.homedesign.android.domain.io.HomedesignZip
 import com.homedesign.android.domain.model.Home
 import com.homedesign.android.domain.model.HomeFactory
@@ -54,7 +55,8 @@ class ProjectRepositoryImpl @Inject constructor(
         val existing = dao.getById(id) ?: error("Project not found: $id")
         val now = System.currentTimeMillis()
         val archive = HomedesignZip.encode(home)
-        val meta = projectMetaFromHome(id, home, existing.createdAt, now)
+        val thumb = thumbnailJpegBytes ?: bestEffortThumb(home) ?: existing.thumbnailBlob
+        val meta = projectMetaFromHome(id, home, existing.createdAt, now, thumbnailJpeg = thumb)
         dao.upsert(
             existing.copy(
                 name = meta.name,
@@ -64,13 +66,29 @@ class ProjectRepositoryImpl @Inject constructor(
                 levelCount = meta.levelCount,
                 floorAreaM2 = meta.floorAreaM2,
                 archiveBlob = archive,
-                thumbnailBlob = thumbnailJpegBytes ?: existing.thumbnailBlob,
+                thumbnailBlob = thumb,
             ),
         )
     }
 
     override suspend fun rename(id: String, name: String) {
-        dao.rename(id, name, System.currentTimeMillis())
+        val trimmed = name.trim().ifBlank { return }
+        val existing = dao.getById(id) ?: return
+        val now = System.currentTimeMillis()
+        val bytes = existing.archiveBlob
+        if (bytes != null) {
+            val home = HomedesignZip.decode(bytes).copy(name = trimmed)
+            val archive = HomedesignZip.encode(home)
+            dao.upsert(
+                existing.copy(
+                    name = trimmed,
+                    updatedAt = now,
+                    archiveBlob = archive,
+                ),
+            )
+        } else {
+            dao.rename(id, trimmed, now)
+        }
     }
 
     override suspend fun delete(id: String) {
@@ -88,8 +106,10 @@ class ProjectRepositoryImpl @Inject constructor(
     ): ProjectMeta {
         val now = System.currentTimeMillis()
         val id = UUID.randomUUID().toString()
-        val archive = HomedesignZip.encode(home)
-        val meta = projectMetaFromHome(id, home.copy(name = name), now, now)
+        val named = home.copy(name = name)
+        val archive = HomedesignZip.encode(named)
+        val thumb = thumbnail ?: bestEffortThumb(named)
+        val meta = projectMetaFromHome(id, named, now, now, thumbnailJpeg = thumb)
         dao.upsert(
             ProjectEntity(
                 id = id,
@@ -101,9 +121,12 @@ class ProjectRepositoryImpl @Inject constructor(
                 levelCount = meta.levelCount,
                 floorAreaM2 = meta.floorAreaM2,
                 archiveBlob = archive,
-                thumbnailBlob = thumbnail,
+                thumbnailBlob = thumb,
             ),
         )
         return meta
     }
+
+    private fun bestEffortThumb(home: Home): ByteArray? =
+        runCatching { PlanThumbnail.renderJpeg(home) }.getOrNull()
 }
