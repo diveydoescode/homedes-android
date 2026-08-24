@@ -173,6 +173,57 @@ object ArcWallGeometry {
         return bellyPoint(start, end, bowFromExtentLocal(signedExtent(wall)))
     }
 
+    /**
+     * Where the canvas draws / hit-tests the bow handle.
+     * Straight walls offset the rest position off the body so a
+     * midpoint body-drag stays wallMove.
+     */
+    fun handleHitPosition(wall: Wall, totalScale: Double): Vec2 {
+        val belly = handlePosition(wall)
+        if (isCurved(wall)) return belly
+        val (start, end) = chordOf(wall)
+        val chord = sub(end, start)
+        val len = length(chord)
+        if (len <= 1e-9) return belly
+        val dir = scale(chord, 1.0 / len)
+        val leftN = vec(dir.y, -dir.x)
+        val pad = hitCurveHandlePx / max(totalScale, 0.001)
+        return add(belly, scale(leftN, wall.thickness / 2.0 + pad))
+    }
+
+    fun spanHandlePosition(wall: Wall, spanIndex: Int): Vec2 {
+        val (start, end) = chordOf(wall)
+        val profile = effectiveProfile(wall)
+        if (spanIndex < 0 || spanIndex >= profile.spans.size) {
+            return scale(add(start, end), 0.5)
+        }
+        val params = spanParams(profile)
+        val p0 = add(start, scale(sub(end, start), params[spanIndex]))
+        val p1 = add(start, scale(sub(end, start), params[spanIndex + 1]))
+        val span = profile.spans[spanIndex]
+        if (isStraightSpan(span)) return scale(add(p0, p1), 0.5)
+        return bellyPoint(p0, p1, spanBow(span))
+    }
+
+    data class BreakpointPos(val t: Double, val point: Vec2)
+
+    fun breakpointPositions(wall: Wall): List<BreakpointPos> {
+        val (start, end) = chordOf(wall)
+        val profile = effectiveProfile(wall)
+        return (profile.breaks ?: emptyList()).map { t ->
+            BreakpointPos(t = t, point = add(start, scale(sub(end, start), t)))
+        }
+    }
+
+    fun spanBowFromHandle(wall: Wall, spanIndex: Int, handlePoint: Vec2): Double {
+        val (start, end) = chordOf(wall)
+        val profile = effectiveProfile(wall)
+        val params = spanParams(profile)
+        val p0 = add(start, scale(sub(end, start), params.getOrElse(spanIndex) { 0.0 }))
+        val p1 = add(start, scale(sub(end, start), params.getOrElse(spanIndex + 1) { 1.0 }))
+        return bow(p0, p1, handlePoint)
+    }
+
     fun distance(point: Vec2, wall: Wall): Double {
         val line = centerline(wall)
         var best = Double.POSITIVE_INFINITY

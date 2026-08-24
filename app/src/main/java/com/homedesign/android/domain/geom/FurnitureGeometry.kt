@@ -1,6 +1,8 @@
 package com.homedesign.android.domain.geom
 
 import com.homedesign.android.domain.model.HomePieceOfFurniture
+import kotlin.math.PI
+import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.max
 import kotlin.math.sin
@@ -33,6 +35,22 @@ fun rotateHandleHit(
     val dx = point.x - handle.x
     val dy = point.y - handle.y
     return dx * dx + dy * dy <= tol * tol
+}
+
+/** Soft snap furniture angle to [rotateSnapDeg] within [rotateSnapWindowDeg] (web parity). */
+fun snapFurnitureAngle(angle: Double): Double {
+    val step = (rotateSnapDeg * PI) / 180.0
+    val window = (rotateSnapWindowDeg * PI) / 180.0
+    val snapped = kotlin.math.round(angle / step) * step
+    return if (abs(angle - snapped) < window) snapped else angle
+}
+
+/** Wrap angle into [0, 2π). */
+fun wrapFurnitureAngle(angle: Double): Double {
+    val twoPi = PI * 2.0
+    var wrapped = angle % twoPi
+    if (wrapped < 0) wrapped += twoPi
+    return wrapped
 }
 
 object FurnitureGeometry {
