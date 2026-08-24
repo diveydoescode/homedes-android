@@ -1,14 +1,19 @@
 package com.homedesign.android.presentation.editor
 
 import android.content.Intent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -17,28 +22,30 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.CameraAlt
+import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Weekend
-import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.FileDownload
+import androidx.compose.material.icons.outlined.Image
+import androidx.compose.material.icons.outlined.Layers
 import androidx.compose.material.icons.outlined.Redo
 import androidx.compose.material.icons.outlined.Straighten
 import androidx.compose.material.icons.outlined.Undo
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Slider
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
@@ -54,19 +61,48 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isCtrlPressed
+import androidx.compose.ui.input.key.isMetaPressed
+import androidx.compose.ui.input.key.isShiftPressed
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.homedesign.android.core.ui.theme.HdTheme
-import com.homedesign.android.domain.catalog.CATALOG_ENTRIES
-import com.homedesign.android.domain.catalog.CatalogEntry
+import com.homedesign.android.domain.catalog.catalogById
+import com.homedesign.android.domain.geom.LevelMutation
+import com.homedesign.android.domain.geom.OpeningKind
+import com.homedesign.android.domain.geom.PlanAxis
+import com.homedesign.android.domain.geom.PlanRotation
+import com.homedesign.android.domain.geom.TRACE_MAX_CM
+import com.homedesign.android.domain.geom.TRACE_MIN_CM
+import com.homedesign.android.domain.geom.defaultWallThicknessCM
 import com.homedesign.android.domain.geom.exteriorThicknessCM
+import com.homedesign.android.domain.geom.formatTraceWidthLabel
 import com.homedesign.android.domain.geom.interiorThicknessCM
+import com.homedesign.android.domain.model.Level
 import com.homedesign.android.domain.model.Selection
+import com.homedesign.android.domain.model.UnitFormat
+import com.homedesign.android.domain.model.UnitSystem
+import kotlin.math.roundToInt
+
+/** Web `SIDE_PANEL_MIN_WIDTH` — property sheet docks right at/above this width. */
+private val SidePanelMinWidth = 672.dp
+private val SidePanelWidth = 360.dp
+/** Side-by-side 2D+3D Split chip is offered at/above this width. */
+private val SplitViewMinWidth = 900.dp
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -74,17 +110,64 @@ fun EditorScreen(
     projectId: String,
     onBack: () -> Unit,
     onOpenSketch: () -> Unit,
+    onOpenProject: (String) -> Unit = {},
     viewModel: EditorViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     var exportOpen by remember { mutableStateOf(false) }
+    var floorMenuOpen by remember { mutableStateOf(false) }
     var showAdd by remember { mutableStateOf(false) }
     var showCatalog by remember { mutableStateOf(false) }
+    var catalogReplaceMode by remember { mutableStateOf(false) }
+    /** null = floor; "left"/"right" = wall side finish. */
+    var pendingTextureImport by remember { mutableStateOf<String?>(null) }
     val snackbar = remember { SnackbarHostState() }
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val addSheetState = rememberModalBottomSheetState()
     val catalogSheetState = rememberModalBottomSheetState()
+
+    val pickTrace = rememberLauncherForActivityResult(
+        ActivityResultContracts.GetContent(),
+    ) { uri ->
+        if (uri != null) viewModel.setTraceFromUri(uri)
+    }
+
+    val pickUserTexture = rememberLauncherForActivityResult(
+        ActivityResultContracts.GetContent(),
+    ) { uri ->
+        val target = pendingTextureImport
+        pendingTextureImport = null
+        if (uri == null) return@rememberLauncherForActivityResult
+        when (target) {
+            "left", "right" -> viewModel.importWallTextureFromUri(target, uri)
+            "floor" -> viewModel.importFloorTextureFromUri(uri)
+        }
+    }
+
+    val pickHomedesign = rememberLauncherForActivityResult(
+        ActivityResultContracts.GetContent(),
+    ) { uri ->
+        if (uri != null) {
+            viewModel.flushSave()
+            viewModel.openHomedesignFromUri(uri, onOpenProject)
+        }
+    }
+
+    val pickSh3d = rememberLauncherForActivityResult(
+        ActivityResultContracts.GetContent(),
+    ) { uri ->
+        if (uri != null) {
+            viewModel.flushSave()
+            viewModel.openSh3dFromUri(uri, onOpenProject)
+        }
+    }
+
+    val saveCopy = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/zip"),
+    ) { uri ->
+        if (uri != null) viewModel.saveCopyToUri(uri)
+    }
 
     LaunchedEffect(projectId) {
         viewModel.load(projectId)
@@ -126,32 +209,186 @@ fun EditorScreen(
     }
 
     val hasSelection = state.selection !is Selection.None
+    var additiveSelect by remember { mutableStateOf(false) }
+    val focusRequester = remember { FocusRequester() }
+    LaunchedEffect(Unit) { focusRequester.requestFocus() }
 
-    Box(
+    BoxWithConstraints(
         modifier = Modifier
             .fillMaxSize()
-            .background(HdTheme.colors.paper),
-    ) {
-        PlanCanvas(
-            home = state.home,
-            selection = state.selection,
-            tool = state.tool,
-            preview = state.preview,
-            onTap = viewModel::onPlanTap,
-            onDrawWallArm = viewModel::onDrawWallArm,
-            onDrawWallDrag = viewModel::onDrawWallDrag,
-            onDrawWallCommit = { plan ->
-                val thickness = (state.tool as? EditorTool.DrawWall)?.thickness
-                    ?: com.homedesign.android.domain.geom.defaultWallThicknessCM
-                viewModel.onDrawWallCommit(plan, thickness)
+            .background(HdTheme.colors.paper)
+            .focusRequester(focusRequester)
+            .focusable()
+            .onPreviewKeyEvent { event ->
+                when (event.key) {
+                    Key.ShiftLeft, Key.ShiftRight,
+                    Key.CtrlLeft, Key.CtrlRight,
+                    Key.MetaLeft, Key.MetaRight,
+                    -> {
+                        additiveSelect = event.type == KeyEventType.KeyDown ||
+                            event.isShiftPressed ||
+                            event.isCtrlPressed ||
+                            event.isMetaPressed
+                        false
+                    }
+                    else -> {
+                        additiveSelect =
+                            event.isShiftPressed || event.isCtrlPressed || event.isMetaPressed
+                        false
+                    }
+                }
             },
-            onDrawRoomDrag = viewModel::onDrawRoomDrag,
-            onDrawRoomCommit = viewModel::onDrawRoomCommit,
-            onCancelPreview = viewModel::cancelPreview,
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(top = 64.dp, bottom = 100.dp),
-        )
+    ) {
+        val sidePanel = maxWidth >= SidePanelMinWidth
+        val splitAvailable = maxWidth >= SplitViewMinWidth
+        val placeTool = state.tool as? EditorTool.PlaceFurniture
+        val showPlanChrome = state.viewMode == EditorViewMode.Plan2D ||
+            state.viewMode == EditorViewMode.Split
+
+        LaunchedEffect(splitAvailable, state.viewMode) {
+            if (!splitAvailable && state.viewMode == EditorViewMode.Split) {
+                viewModel.setViewMode(EditorViewMode.Plan2D)
+            }
+        }
+
+        when (state.viewMode) {
+            EditorViewMode.View3D, EditorViewMode.Walk -> {
+                Plan3DScreen(
+                    home = state.home,
+                    cameraMode = if (state.viewMode == EditorViewMode.Walk) {
+                        Plan3DCameraMode.Walk
+                    } else {
+                        Plan3DCameraMode.Orbit
+                    },
+                    onBackToPlan = { viewModel.setViewMode(EditorViewMode.Plan2D) },
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
+            EditorViewMode.AR -> {
+                val soloFurnitureId = (state.selection as? Selection.Furniture)?.id
+                ArHomeScreen(
+                    home = state.home,
+                    soloFurnitureId = soloFurnitureId,
+                    onBackToPlan = { viewModel.setViewMode(EditorViewMode.Plan2D) },
+                    onOpenWalk = { viewModel.setViewMode(EditorViewMode.Walk) },
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
+            EditorViewMode.Split -> {
+                Row(
+                    Modifier
+                        .fillMaxSize()
+                        .padding(
+                            top = 64.dp,
+                            bottom = 100.dp,
+                            end = if (sidePanel && hasSelection && state.tool is EditorTool.Select) {
+                                SidePanelWidth + 24.dp
+                            } else {
+                                0.dp
+                            },
+                        ),
+                ) {
+                    PlanCanvas(
+                        home = state.home,
+                        selection = state.selection,
+                        tool = state.tool,
+                        preview = state.preview,
+                        unitSystem = state.unitSystem,
+                        trace = state.trace,
+                        ghostOtherLevels = state.ghostOtherLevels,
+                        additiveSelect = additiveSelect,
+                        cameraFocus = state.cameraFocus,
+                        onTap = viewModel::onPlanTap,
+                        onDrawWallArm = viewModel::onDrawWallArm,
+                        onDrawWallDrag = viewModel::onDrawWallDrag,
+                        onDrawWallCommit = { plan, scale ->
+                            val thickness = (state.tool as? EditorTool.DrawWall)?.thickness
+                                ?: defaultWallThicknessCM
+                            viewModel.onDrawWallCommit(plan, thickness, scale)
+                        },
+                        onDrawRoomDrag = viewModel::onDrawRoomDrag,
+                        onDrawRoomCommit = viewModel::onDrawRoomCommit,
+                        onCancelPreview = viewModel::cancelPreview,
+                        tryBeginOpeningDrag = viewModel::tryBeginOpeningDrag,
+                        onOpeningDrag = viewModel::updateOpeningDrag,
+                        onOpeningDragEnd = viewModel::endOpeningDrag,
+                        tryBeginBowHandleDrag = viewModel::tryBeginBowHandleDrag,
+                        onBowHandleDrag = viewModel::updateBowHandleDrag,
+                        onBowHandleDragEnd = viewModel::endBowHandleDrag,
+                        onFurnitureMovePreview = viewModel::onFurnitureMovePreview,
+                        onFurnitureRotatePreview = viewModel::onFurnitureRotatePreview,
+                        onFurnitureMoveCommit = viewModel::commitFurnitureMoveGesture,
+                        onFurnitureRotateCommit = viewModel::commitFurnitureRotateGesture,
+                        onDimensionEndPreview = viewModel::onDimensionEndPreview,
+                        onDimensionOffsetPreview = viewModel::onDimensionOffsetPreview,
+                        onDimensionEditCommit = viewModel::commitDimensionEdit,
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight(),
+                    )
+                    Box(
+                        Modifier
+                            .width(1.dp)
+                            .fillMaxHeight()
+                            .background(HdTheme.colors.hairline),
+                    )
+                    Plan3DScreen(
+                        home = state.home,
+                        cameraMode = Plan3DCameraMode.Orbit,
+                        onBackToPlan = { viewModel.setViewMode(EditorViewMode.Plan2D) },
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight(),
+                    )
+                }
+            }
+            EditorViewMode.Plan2D -> PlanCanvas(
+                home = state.home,
+                selection = state.selection,
+                tool = state.tool,
+                preview = state.preview,
+                unitSystem = state.unitSystem,
+                trace = state.trace,
+                ghostOtherLevels = state.ghostOtherLevels,
+                additiveSelect = additiveSelect,
+                cameraFocus = state.cameraFocus,
+                onTap = viewModel::onPlanTap,
+                onDrawWallArm = viewModel::onDrawWallArm,
+                onDrawWallDrag = viewModel::onDrawWallDrag,
+                onDrawWallCommit = { plan, scale ->
+                    val thickness = (state.tool as? EditorTool.DrawWall)?.thickness
+                        ?: defaultWallThicknessCM
+                    viewModel.onDrawWallCommit(plan, thickness, scale)
+                },
+                onDrawRoomDrag = viewModel::onDrawRoomDrag,
+                onDrawRoomCommit = viewModel::onDrawRoomCommit,
+                onCancelPreview = viewModel::cancelPreview,
+                tryBeginOpeningDrag = viewModel::tryBeginOpeningDrag,
+                onOpeningDrag = viewModel::updateOpeningDrag,
+                onOpeningDragEnd = viewModel::endOpeningDrag,
+                tryBeginBowHandleDrag = viewModel::tryBeginBowHandleDrag,
+                onBowHandleDrag = viewModel::updateBowHandleDrag,
+                onBowHandleDragEnd = viewModel::endBowHandleDrag,
+                onFurnitureMovePreview = viewModel::onFurnitureMovePreview,
+                onFurnitureRotatePreview = viewModel::onFurnitureRotatePreview,
+                onFurnitureMoveCommit = viewModel::commitFurnitureMoveGesture,
+                onFurnitureRotateCommit = viewModel::commitFurnitureRotateGesture,
+                onDimensionEndPreview = viewModel::onDimensionEndPreview,
+                onDimensionOffsetPreview = viewModel::onDimensionOffsetPreview,
+                onDimensionEditCommit = viewModel::commitDimensionEdit,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(
+                        top = 64.dp,
+                        bottom = 100.dp,
+                        end = if (sidePanel && hasSelection && state.tool is EditorTool.Select) {
+                            SidePanelWidth + 24.dp
+                        } else {
+                            0.dp
+                        },
+                    ),
+            )
+        }
 
         Column(
             modifier = Modifier
@@ -190,21 +427,122 @@ fun EditorScreen(
                         color = HdTheme.colors.architectGray,
                     )
                 }
+                ViewModeChips(
+                    selected = state.viewMode,
+                    onSelect = viewModel::setViewMode,
+                    showSplit = splitAvailable,
+                )
+                if (showPlanChrome) {
+                    UnitSystemChips(
+                        selected = state.unitSystem,
+                        onSelect = viewModel::setUnitSystem,
+                    )
+                }
                 IconButton(onClick = viewModel::undo, enabled = state.canUndo) {
                     Icon(Icons.Outlined.Undo, contentDescription = "Undo", tint = HdTheme.colors.architectInk)
                 }
                 IconButton(onClick = viewModel::redo, enabled = state.canRedo) {
                     Icon(Icons.Outlined.Redo, contentDescription = "Redo", tint = HdTheme.colors.architectInk)
                 }
+                FloorSelectorButton(
+                    levels = state.home.levels,
+                    selectedLevelID = state.home.selectedLevelID,
+                    ghostOtherLevels = state.ghostOtherLevels,
+                    menuOpen = floorMenuOpen,
+                    onMenuOpenChange = { floorMenuOpen = it },
+                    onSelectLevel = viewModel::selectLevel,
+                    onAddFloor = viewModel::addFloorOnTop,
+                    onToggleGhost = viewModel::toggleGhostOtherLevels,
+                )
                 Box {
                     IconButton(onClick = { exportOpen = true }) {
                         Icon(
                             Icons.Outlined.FileDownload,
-                            contentDescription = "Export",
+                            contentDescription = "File",
                             tint = HdTheme.colors.architectInk,
                         )
                     }
                     DropdownMenu(expanded = exportOpen, onDismissRequest = { exportOpen = false }) {
+                        DropdownMenuItem(
+                            text = { Text("Open .homedesign…") },
+                            onClick = {
+                                exportOpen = false
+                                pickHomedesign.launch("*/*")
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Open .sh3d…") },
+                            onClick = {
+                                exportOpen = false
+                                pickSh3d.launch("*/*")
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Save a copy…") },
+                            onClick = {
+                                exportOpen = false
+                                saveCopy.launch(viewModel.suggestedSaveFilename())
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Trace photo…") },
+                            onClick = {
+                                exportOpen = false
+                                pickTrace.launch("image/*")
+                            },
+                        )
+                        HorizontalDivider()
+                        DropdownMenuItem(
+                            text = { Text("Units: millimetres") },
+                            onClick = {
+                                exportOpen = false
+                                viewModel.setUnitSystem(UnitSystem.Millimetre)
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Units: centimetres") },
+                            onClick = {
+                                exportOpen = false
+                                viewModel.setUnitSystem(UnitSystem.Metric)
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Units: feet & inches") },
+                            onClick = {
+                                exportOpen = false
+                                viewModel.setUnitSystem(UnitSystem.Imperial)
+                            },
+                        )
+                        HorizontalDivider()
+                        DropdownMenuItem(
+                            text = { Text("Mirror plan L↔R") },
+                            onClick = {
+                                exportOpen = false
+                                viewModel.mirrorPlan(PlanAxis.Vertical)
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Mirror plan T↔B") },
+                            onClick = {
+                                exportOpen = false
+                                viewModel.mirrorPlan(PlanAxis.Horizontal)
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Rotate plan 90° CW") },
+                            onClick = {
+                                exportOpen = false
+                                viewModel.rotatePlan(PlanRotation.Clockwise)
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Rotate plan 90° CCW") },
+                            onClick = {
+                                exportOpen = false
+                                viewModel.rotatePlan(PlanRotation.CounterClockwise)
+                            },
+                        )
+                        HorizontalDivider()
                         DropdownMenuItem(
                             text = { Text("Export PDF") },
                             onClick = {
@@ -231,7 +569,35 @@ fun EditorScreen(
             }
         }
 
-        Row(
+        if (showPlanChrome &&
+            state.showEditorTip &&
+            placeTool == null &&
+            state.trace == null
+        ) {
+            EditorTipBanner(
+                onDismiss = viewModel::dismissEditorTip,
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .statusBarsPadding()
+                    .padding(top = 72.dp, start = 16.dp, end = 16.dp),
+            )
+        }
+
+        if (showPlanChrome) {
+            state.trace?.let { underlay ->
+                TraceUnderlayCapsule(
+                    widthCM = underlay.widthCM,
+                    onWidthCM = viewModel::setTraceWidthCM,
+                    onRemove = viewModel::clearTrace,
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .statusBarsPadding()
+                        .padding(top = 72.dp),
+                )
+            }
+        }
+
+        if (showPlanChrome) Row(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .navigationBarsPadding()
@@ -258,6 +624,44 @@ fun EditorScreen(
                     tint = if (measure) HdTheme.colors.paper else HdTheme.colors.architectInk,
                     modifier = Modifier.size(18.dp),
                 )
+            }
+            if (measure) {
+                DockItem(
+                    label = "Ext dims",
+                    active = false,
+                    onClick = { viewModel.applyExteriorDims() },
+                ) {
+                    Text(
+                        "Ext",
+                        color = HdTheme.colors.architectInk,
+                        style = HdTheme.typography.labelSmall,
+                    )
+                }
+            }
+            if (state.tool is EditorTool.DrawWall) {
+                val thickness = (state.tool as EditorTool.DrawWall).thickness
+                DockItem(
+                    label = "Int",
+                    active = kotlin.math.abs(thickness - interiorThicknessCM) < 0.1,
+                    onClick = { viewModel.setTool(EditorTool.DrawWall(interiorThicknessCM)) },
+                ) {
+                    Text(
+                        UnitFormat.length(interiorThicknessCM, state.unitSystem),
+                        color = HdTheme.colors.architectInk,
+                        style = HdTheme.typography.labelSmall,
+                    )
+                }
+                DockItem(
+                    label = "Ext",
+                    active = kotlin.math.abs(thickness - exteriorThicknessCM) < 0.1,
+                    onClick = { viewModel.setTool(EditorTool.DrawWall(exteriorThicknessCM)) },
+                ) {
+                    Text(
+                        UnitFormat.length(exteriorThicknessCM, state.unitSystem),
+                        color = HdTheme.colors.architectInk,
+                        style = HdTheme.typography.labelSmall,
+                    )
+                }
             }
             DockItem(label = "Add", ink = true, onClick = { showAdd = true }) {
                 Icon(
@@ -292,26 +696,186 @@ fun EditorScreen(
             }
         }
 
-        if (hasSelection && state.tool is EditorTool.Select) {
-            Box(
+        if (showPlanChrome && placeTool != null) {
+            PlaceFurnitureBanner(
+                catalogId = placeTool.catalogId,
+                stamp = placeTool.stamp,
+                onToggleStamp = viewModel::toggleStampMode,
+                onCancel = { viewModel.setTool(EditorTool.Select) },
                 modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .navigationBarsPadding()
-                    .padding(start = 12.dp, end = 12.dp, bottom = 108.dp)
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(18.dp))
-                    .background(HdTheme.colors.ivory.copy(alpha = 0.96f))
-                    .border(1.dp, HdTheme.colors.hairline, RoundedCornerShape(18.dp))
-                    .padding(12.dp),
-            ) {
-                PropertySheetContent(
-                    state = state,
-                    onDelete = viewModel::deleteSelected,
-                    onInterior = { viewModel.setWallThickness(interior = true) },
-                    onExterior = { viewModel.setWallThickness(interior = false) },
-                    onRename = viewModel::renameSelection,
-                    compact = true,
-                )
+                    .align(Alignment.TopCenter)
+                    .statusBarsPadding()
+                    .padding(top = 72.dp),
+            )
+        }
+
+        if (showPlanChrome && state.tool is EditorTool.FormatPainter) {
+            FormatPainterBanner(
+                onCancel = { viewModel.setTool(EditorTool.Select) },
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .statusBarsPadding()
+                    .padding(top = 72.dp),
+            )
+        }
+
+        if (showPlanChrome &&
+            hasSelection &&
+            state.tool is EditorTool.Select
+        ) {
+            if (sidePanel) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .statusBarsPadding()
+                        .padding(top = 72.dp, end = 12.dp, bottom = 108.dp)
+                        .width(SidePanelWidth)
+                        .fillMaxHeight()
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(HdTheme.colors.ivory.copy(alpha = 0.96f))
+                        .border(1.dp, HdTheme.colors.hairline, RoundedCornerShape(16.dp)),
+                ) {
+                    PropertySheetContent(
+                        state = state,
+                        unitSystem = state.unitSystem,
+                        onDelete = viewModel::deleteSelected,
+                        onInterior = { viewModel.setWallThickness(interior = true) },
+                        onExterior = { viewModel.setWallThickness(interior = false) },
+                        onRename = viewModel::renameSelection,
+                        onWallLength = viewModel::setWallLength,
+                        onWallHeight = viewModel::setWallHeight,
+                        onWallSideColor = viewModel::setWallSideColor,
+                        onWallSidePreset = viewModel::setWallSidePreset,
+                        onClearWallSideTexture = viewModel::clearWallSideTexture,
+                        onWallPattern = viewModel::setWallPattern,
+                        onWallGlass = viewModel::setWallGlass,
+                        onStraightenWall = viewModel::straightenWall,
+                        onAddCurvePoint = viewModel::addCurvePoint,
+                        onWallBaseboardEnabled = viewModel::setWallBaseboardEnabled,
+                        onWallBaseboardHeight = viewModel::setWallBaseboardHeight,
+                        onWallBaseboardThickness = viewModel::setWallBaseboardThickness,
+                        onFormatPainter = viewModel::startFormatPainter,
+                        onImportWallTexture = { side ->
+                            pendingTextureImport = side
+                            pickUserTexture.launch("image/*")
+                        },
+                        onFloorColor = viewModel::setFloorColor,
+                        onFloorPreset = viewModel::setFloorPreset,
+                        onClearFloorTexture = viewModel::clearFloorTexture,
+                        onImportFloorTexture = {
+                            pendingTextureImport = "floor"
+                            pickUserTexture.launch("image/*")
+                        },
+                        onCeilingColor = viewModel::setCeilingColor,
+                        onCeilingPreset = viewModel::setCeilingPreset,
+                        onClearCeilingTexture = viewModel::clearCeilingTexture,
+                        onRoomBorder = viewModel::setRoomBorder,
+                        onCeilingVisible = viewModel::setCeilingVisible,
+                        onCeilingStyle = viewModel::setCeilingStyle,
+                        onRoomSize = viewModel::setRoomSize,
+                        onStageRoom = viewModel::stageSelectedRoom,
+                        onOpeningWidth = viewModel::setOpeningWidth,
+                        onFlipHinge = viewModel::flipOpeningHinge,
+                        onFlipSwing = viewModel::flipOpeningSwing,
+                        onFurnitureWidth = viewModel::setFurnitureWidth,
+                        onFurnitureDepth = viewModel::setFurnitureDepth,
+                        onFurnitureAngleDeg = viewModel::setFurnitureAngleDeg,
+                        onCopyFurniture = viewModel::copySelection,
+                        onPasteFurniture = viewModel::pasteClipboard,
+                        onDuplicateFurniture = viewModel::duplicateSelection,
+                        onReplaceFurniture = {
+                            catalogReplaceMode = true
+                            showCatalog = true
+                        },
+                        onAlign = viewModel::alignSelection,
+                        onDistribute = viewModel::distributeSelection,
+                        onGroupFurniture = viewModel::groupSelection,
+                        onUngroupFurniture = viewModel::ungroupSelection,
+                        onMirrorFurniture = viewModel::mirrorSelection,
+                        onDimensionLength = viewModel::setDimensionLength,
+                        compact = false,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .verticalScroll(rememberScrollState())
+                            .padding(12.dp),
+                    )
+                }
+            } else {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .navigationBarsPadding()
+                        .padding(start = 12.dp, end = 12.dp, bottom = 108.dp)
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(18.dp))
+                        .background(HdTheme.colors.ivory.copy(alpha = 0.96f))
+                        .border(1.dp, HdTheme.colors.hairline, RoundedCornerShape(18.dp))
+                        .padding(12.dp),
+                ) {
+                    PropertySheetContent(
+                        state = state,
+                        unitSystem = state.unitSystem,
+                        onDelete = viewModel::deleteSelected,
+                        onInterior = { viewModel.setWallThickness(interior = true) },
+                        onExterior = { viewModel.setWallThickness(interior = false) },
+                        onRename = viewModel::renameSelection,
+                        onWallLength = viewModel::setWallLength,
+                        onWallHeight = viewModel::setWallHeight,
+                        onWallSideColor = viewModel::setWallSideColor,
+                        onWallSidePreset = viewModel::setWallSidePreset,
+                        onClearWallSideTexture = viewModel::clearWallSideTexture,
+                        onWallPattern = viewModel::setWallPattern,
+                        onWallGlass = viewModel::setWallGlass,
+                        onStraightenWall = viewModel::straightenWall,
+                        onAddCurvePoint = viewModel::addCurvePoint,
+                        onWallBaseboardEnabled = viewModel::setWallBaseboardEnabled,
+                        onWallBaseboardHeight = viewModel::setWallBaseboardHeight,
+                        onWallBaseboardThickness = viewModel::setWallBaseboardThickness,
+                        onFormatPainter = viewModel::startFormatPainter,
+                        onImportWallTexture = { side ->
+                            pendingTextureImport = side
+                            pickUserTexture.launch("image/*")
+                        },
+                        onFloorColor = viewModel::setFloorColor,
+                        onFloorPreset = viewModel::setFloorPreset,
+                        onClearFloorTexture = viewModel::clearFloorTexture,
+                        onImportFloorTexture = {
+                            pendingTextureImport = "floor"
+                            pickUserTexture.launch("image/*")
+                        },
+                        onCeilingColor = viewModel::setCeilingColor,
+                        onCeilingPreset = viewModel::setCeilingPreset,
+                        onClearCeilingTexture = viewModel::clearCeilingTexture,
+                        onRoomBorder = viewModel::setRoomBorder,
+                        onCeilingVisible = viewModel::setCeilingVisible,
+                        onCeilingStyle = viewModel::setCeilingStyle,
+                        onRoomSize = viewModel::setRoomSize,
+                        onStageRoom = viewModel::stageSelectedRoom,
+                        onOpeningWidth = viewModel::setOpeningWidth,
+                        onFlipHinge = viewModel::flipOpeningHinge,
+                        onFlipSwing = viewModel::flipOpeningSwing,
+                        onFurnitureWidth = viewModel::setFurnitureWidth,
+                        onFurnitureDepth = viewModel::setFurnitureDepth,
+                        onFurnitureAngleDeg = viewModel::setFurnitureAngleDeg,
+                        onCopyFurniture = viewModel::copySelection,
+                        onPasteFurniture = viewModel::pasteClipboard,
+                        onDuplicateFurniture = viewModel::duplicateSelection,
+                        onReplaceFurniture = {
+                            catalogReplaceMode = true
+                            showCatalog = true
+                        },
+                        onAlign = viewModel::alignSelection,
+                        onDistribute = viewModel::distributeSelection,
+                        onGroupFurniture = viewModel::groupSelection,
+                        onUngroupFurniture = viewModel::ungroupSelection,
+                        onMirrorFurniture = viewModel::mirrorSelection,
+                        onDimensionLength = viewModel::setDimensionLength,
+                        compact = true,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .verticalScroll(rememberScrollState()),
+                    )
+                }
             }
         }
 
@@ -330,9 +894,14 @@ fun EditorScreen(
             containerColor = HdTheme.colors.ivory,
         ) {
             AddSheetContent(
-                onDrawWall = {
+                unitSystem = state.unitSystem,
+                onDrawWallInterior = {
                     showAdd = false
-                    viewModel.setTool(EditorTool.DrawWall())
+                    viewModel.setTool(EditorTool.DrawWall(interiorThicknessCM))
+                },
+                onDrawWallExterior = {
+                    showAdd = false
+                    viewModel.setTool(EditorTool.DrawWall(exteriorThicknessCM))
                 },
                 onDrawRoom = {
                     showAdd = false
@@ -342,9 +911,30 @@ fun EditorScreen(
                     showAdd = false
                     viewModel.setTool(EditorTool.Dimension)
                 },
+                onExteriorDims = {
+                    showAdd = false
+                    viewModel.applyExteriorDims()
+                },
+                onDoor = {
+                    showAdd = false
+                    viewModel.setTool(EditorTool.PlaceOpening(OpeningKind.Door))
+                },
+                onWindow = {
+                    showAdd = false
+                    viewModel.setTool(EditorTool.PlaceOpening(OpeningKind.Window))
+                },
+                onFrench = {
+                    showAdd = false
+                    viewModel.setTool(EditorTool.PlaceOpening(OpeningKind.FrenchDoor))
+                },
                 onFurniture = {
                     showAdd = false
+                    catalogReplaceMode = false
                     showCatalog = true
+                },
+                onTrace = {
+                    showAdd = false
+                    pickTrace.launch("image/*")
                 },
             )
         }
@@ -352,15 +942,26 @@ fun EditorScreen(
 
     if (showCatalog) {
         ModalBottomSheet(
-            onDismissRequest = { showCatalog = false },
+            onDismissRequest = {
+                showCatalog = false
+                catalogReplaceMode = false
+            },
             sheetState = catalogSheetState,
             containerColor = HdTheme.colors.ivory,
         ) {
             FurniturePickerContent(
-                entries = CATALOG_ENTRIES.filter { !it.doorOrWindow },
+                unitSystem = state.unitSystem,
+                recentIds = state.recentFurnitureIds,
+                title = if (catalogReplaceMode) "Replace with…" else "Catalog",
                 onPick = { entry ->
                     showCatalog = false
-                    viewModel.setTool(EditorTool.PlaceFurniture(entry.id))
+                    viewModel.recordRecentFurniture(entry.id)
+                    if (catalogReplaceMode) {
+                        catalogReplaceMode = false
+                        viewModel.replaceFurniture(entry)
+                    } else {
+                        viewModel.setTool(EditorTool.PlaceFurniture(entry.id))
+                    }
                 },
             )
         }
@@ -368,12 +969,336 @@ fun EditorScreen(
 }
 
 @Composable
+private fun EditorTipBanner(
+    onDismiss: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(HdTheme.colors.selection.copy(alpha = 0.12f))
+            .border(1.dp, HdTheme.colors.selection.copy(alpha = 0.35f), RoundedCornerShape(14.dp))
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text(
+            text = "Tip: Add → wall to draw · pinch to zoom · two fingers to pan",
+            style = HdTheme.typography.labelMedium,
+            color = HdTheme.colors.architectInk,
+            modifier = Modifier.weight(1f),
+        )
+        IconButton(onClick = onDismiss, modifier = Modifier.size(32.dp)) {
+            Icon(
+                Icons.Outlined.Close,
+                contentDescription = "Dismiss tip",
+                tint = HdTheme.colors.architectInk,
+            )
+        }
+    }
+}
+
+@Composable
+private fun FloorSelectorButton(
+    levels: List<Level>,
+    selectedLevelID: String?,
+    ghostOtherLevels: Boolean,
+    menuOpen: Boolean,
+    onMenuOpenChange: (Boolean) -> Unit,
+    onSelectLevel: (String) -> Unit,
+    onAddFloor: () -> Unit,
+    onToggleGhost: () -> Unit,
+) {
+    val ordered = remember(levels) { LevelMutation.orderedVisible(levels) }
+    if (ordered.isEmpty()) return
+    val active = ordered.firstOrNull { it.id == selectedLevelID } ?: ordered.first()
+    Box {
+        IconButton(onClick = { onMenuOpenChange(true) }) {
+            Box(
+                modifier = Modifier
+                    .size(36.dp)
+                    .clip(CircleShape)
+                    .background(HdTheme.colors.selection),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = LevelMutation.elevatorLabel(active),
+                    style = HdTheme.typography.labelMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = HdTheme.colors.paper,
+                )
+            }
+        }
+        DropdownMenu(
+            expanded = menuOpen,
+            onDismissRequest = { onMenuOpenChange(false) },
+        ) {
+            ordered.forEach { level ->
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            text = LevelMutation.menuLabel(level),
+                            fontWeight = if (level.id == active.id) FontWeight.SemiBold else FontWeight.Normal,
+                        )
+                    },
+                    onClick = {
+                        onMenuOpenChange(false)
+                        onSelectLevel(level.id)
+                    },
+                    leadingIcon = if (level.id == active.id) {
+                        {
+                            Icon(
+                                Icons.Outlined.Layers,
+                                contentDescription = null,
+                                tint = HdTheme.colors.selection,
+                            )
+                        }
+                    } else {
+                        null
+                    },
+                )
+            }
+            HorizontalDivider()
+            DropdownMenuItem(
+                text = { Text("Add floor on top") },
+                onClick = {
+                    onMenuOpenChange(false)
+                    onAddFloor()
+                },
+                leadingIcon = {
+                    Icon(Icons.Outlined.Add, contentDescription = null)
+                },
+            )
+            if (ordered.size > 1) {
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            if (ghostOtherLevels) "Hide other floors" else "Show ghosted floors",
+                        )
+                    },
+                    onClick = {
+                        onMenuOpenChange(false)
+                        onToggleGhost()
+                    },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun FormatPainterBanner(
+    onCancel: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier
+            .clip(RoundedCornerShape(999.dp))
+            .background(HdTheme.colors.ivory.copy(alpha = 0.94f))
+            .border(1.dp, HdTheme.colors.hairline, RoundedCornerShape(999.dp))
+            .padding(horizontal = 12.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text(
+            text = "Tap walls to paint",
+            style = HdTheme.typography.labelMedium,
+            color = HdTheme.colors.architectInk,
+        )
+        Text(
+            text = "Done",
+            style = HdTheme.typography.labelSmall,
+            color = HdTheme.colors.selectionDeep,
+            modifier = Modifier
+                .clip(RoundedCornerShape(999.dp))
+                .clickable(onClick = onCancel)
+                .padding(horizontal = 8.dp, vertical = 6.dp),
+        )
+    }
+}
+
+@Composable
+private fun PlaceFurnitureBanner(
+    catalogId: String?,
+    stamp: Boolean,
+    onToggleStamp: () -> Unit,
+    onCancel: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val name = catalogId?.let { catalogById(it)?.name } ?: "Furniture"
+    Row(
+        modifier = modifier
+            .clip(RoundedCornerShape(999.dp))
+            .background(HdTheme.colors.ivory.copy(alpha = 0.94f))
+            .border(1.dp, HdTheme.colors.hairline, RoundedCornerShape(999.dp))
+            .padding(horizontal = 12.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text(
+            text = "Place $name",
+            style = HdTheme.typography.labelMedium,
+            color = HdTheme.colors.architectInk,
+        )
+        Text(
+            text = "Stamp",
+            style = HdTheme.typography.labelSmall,
+            color = if (stamp) HdTheme.colors.paper else HdTheme.colors.architectInk,
+            modifier = Modifier
+                .clip(RoundedCornerShape(999.dp))
+                .background(if (stamp) HdTheme.colors.selection else HdTheme.colors.highlight)
+                .clickable(onClick = onToggleStamp)
+                .padding(horizontal = 10.dp, vertical = 6.dp),
+        )
+        Text(
+            text = "Done",
+            style = HdTheme.typography.labelSmall,
+            color = HdTheme.colors.selectionDeep,
+            modifier = Modifier
+                .clip(RoundedCornerShape(999.dp))
+                .clickable(onClick = onCancel)
+                .padding(horizontal = 8.dp, vertical = 6.dp),
+        )
+    }
+}
+
+@Composable
+private fun TraceUnderlayCapsule(
+    widthCM: Double,
+    onWidthCM: (Double) -> Unit,
+    onRemove: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier
+            .clip(RoundedCornerShape(999.dp))
+            .background(HdTheme.colors.ivory.copy(alpha = 0.94f))
+            .border(1.dp, HdTheme.colors.hairline, RoundedCornerShape(999.dp))
+            .padding(horizontal = 12.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Icon(
+            Icons.Outlined.Image,
+            contentDescription = null,
+            tint = HdTheme.colors.architectInk,
+            modifier = Modifier.size(16.dp),
+        )
+        Slider(
+            value = (widthCM / 100.0).toFloat(),
+            onValueChange = { onWidthCM(it.toDouble() * 100.0) },
+            valueRange = (TRACE_MIN_CM / 100.0).toFloat()..(TRACE_MAX_CM / 100.0).toFloat(),
+            steps = ((TRACE_MAX_CM - TRACE_MIN_CM) / 100.0).roundToInt() - 1,
+            modifier = Modifier.width(140.dp),
+        )
+        Text(
+            text = formatTraceWidthLabel(widthCM),
+            style = HdTheme.typography.labelSmall,
+            color = HdTheme.colors.architectInk,
+        )
+        IconButton(onClick = onRemove, modifier = Modifier.size(32.dp)) {
+            Icon(
+                Icons.Outlined.Close,
+                contentDescription = "Remove trace image",
+                tint = HdTheme.colors.architectInk,
+            )
+        }
+    }
+}
+
+@Composable
+private fun ViewModeChips(
+    selected: EditorViewMode,
+    onSelect: (EditorViewMode) -> Unit,
+    showSplit: Boolean = false,
+) {
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .padding(end = 4.dp)
+            .clip(RoundedCornerShape(10.dp))
+            .background(HdTheme.colors.highlight)
+            .padding(2.dp),
+    ) {
+        buildList {
+            add(EditorViewMode.Plan2D to "2D")
+            if (showSplit) add(EditorViewMode.Split to "Split")
+            add(EditorViewMode.View3D to "3D")
+            add(EditorViewMode.Walk to "Walk")
+            add(EditorViewMode.AR to "AR")
+        }.forEach { (mode, label) ->
+            val active = selected == mode
+            Text(
+                text = label,
+                style = HdTheme.typography.labelSmall,
+                color = if (active) HdTheme.colors.paper else HdTheme.colors.architectInk,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(
+                        when {
+                            active && mode != EditorViewMode.Plan2D -> HdTheme.colors.terracotta
+                            active -> HdTheme.colors.architectInk
+                            else -> Color.Transparent
+                        },
+                    )
+                    .clickable { onSelect(mode) }
+                    .padding(horizontal = 8.dp, vertical = 6.dp),
+            )
+        }
+    }
+}
+
+@Composable
+private fun UnitSystemChips(
+    selected: UnitSystem,
+    onSelect: (UnitSystem) -> Unit,
+) {
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .clip(RoundedCornerShape(10.dp))
+            .background(HdTheme.colors.highlight)
+            .padding(2.dp),
+    ) {
+        listOf(
+            UnitSystem.Millimetre to "mm",
+            UnitSystem.Metric to "cm",
+            UnitSystem.Imperial to "ft",
+        ).forEach { (system, label) ->
+            val active = selected == system
+            Text(
+                text = label,
+                style = HdTheme.typography.labelSmall,
+                color = if (active) HdTheme.colors.paper else HdTheme.colors.architectInk,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(if (active) HdTheme.colors.architectInk else Color.Transparent)
+                    .clickable { onSelect(system) }
+                    .padding(horizontal = 8.dp, vertical = 6.dp),
+            )
+        }
+    }
+}
+
+@Composable
 private fun AddSheetContent(
-    onDrawWall: () -> Unit,
+    unitSystem: UnitSystem,
+    onDrawWallInterior: () -> Unit,
+    onDrawWallExterior: () -> Unit,
     onDrawRoom: () -> Unit,
     onDimension: () -> Unit,
+    onExteriorDims: () -> Unit,
+    onDoor: () -> Unit,
+    onWindow: () -> Unit,
+    onFrench: () -> Unit,
     onFurniture: () -> Unit,
+    onTrace: () -> Unit,
 ) {
+    val intLabel = UnitFormat.length(interiorThicknessCM, unitSystem)
+    val extLabel = UnitFormat.length(exteriorThicknessCM, unitSystem)
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -382,129 +1307,17 @@ private fun AddSheetContent(
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Text("Add", style = HdTheme.typography.titleLarge, color = HdTheme.colors.ink)
-        SheetRow("Wall", "Tap start, tap or drag end", onDrawWall)
+        SheetRow("Interior wall · $intLabel", "Tap start, tap end; tap again to finish", onDrawWallInterior)
+        SheetRow("Exterior wall · $extLabel", "Tap start, tap end; tap again to finish", onDrawWallExterior)
         SheetRow("Room", "Drag a rectangle", onDrawRoom)
+        SheetRow("Door", "Tap a wall to insert", onDoor)
+        SheetRow("Window", "Tap a wall to insert", onWindow)
+        SheetRow("French door", "Tap a wall to insert", onFrench)
         SheetRow("Dimension", "Tap two points", onDimension)
+        SheetRow("Exterior dims", "Auto-chain outer face dimensions for this level", onExteriorDims)
         SheetRow("Furniture…", "Pick from the catalog", onFurniture)
+        SheetRow("Trace photo…", "Photo under the plan at 35% opacity", onTrace)
         Spacer(Modifier.height(16.dp))
-    }
-}
-
-@Composable
-private fun FurniturePickerContent(
-    entries: List<CatalogEntry>,
-    onPick: (CatalogEntry) -> Unit,
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp)
-            .navigationBarsPadding(),
-    ) {
-        Text("Catalog", style = HdTheme.typography.titleLarge, color = HdTheme.colors.ink)
-        Spacer(Modifier.height(8.dp))
-        LazyColumn(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            items(entries, key = { it.id }) { entry ->
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(12.dp))
-                        .clickable { onPick(entry) }
-                        .padding(12.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                ) {
-                    Column {
-                        Text(entry.name, style = HdTheme.typography.titleSmall, color = HdTheme.colors.ink)
-                        Text(entry.category, style = HdTheme.typography.labelSmall, color = HdTheme.colors.stone)
-                    }
-                    Text(
-                        "${entry.width.toInt()}×${entry.depth.toInt()}",
-                        style = HdTheme.typography.labelSmall,
-                        color = HdTheme.colors.architectGray,
-                    )
-                }
-            }
-            item { Spacer(Modifier.height(24.dp)) }
-        }
-    }
-}
-
-@Composable
-private fun PropertySheetContent(
-    state: EditorUiState,
-    onDelete: () -> Unit,
-    onInterior: () -> Unit,
-    onExterior: () -> Unit,
-    onRename: (String) -> Unit,
-    compact: Boolean = false,
-) {
-    val home = state.home
-    val selection = state.selection
-    var name by remember(selection) {
-        mutableStateOf(
-            when (selection) {
-                is Selection.Room -> home.rooms.find { it.id == selection.id }?.name.orEmpty()
-                is Selection.Furniture -> home.furniture.find { it.id == selection.id }?.name.orEmpty()
-                is Selection.Wall -> "Wall"
-                is Selection.Endpoint -> "Wall"
-                is Selection.Opening -> "Opening"
-                is Selection.Annotation -> if (selection.isLabel) "Label" else "Dimension"
-                else -> ""
-            },
-        )
-    }
-    val wall = when (selection) {
-        is Selection.Wall -> home.walls.find { it.id == selection.id }
-        is Selection.Endpoint -> home.walls.find { it.id == selection.wallID }
-        else -> null
-    }
-
-    Column(
-        modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(if (compact) 8.dp else 12.dp),
-    ) {
-        if (!compact) {
-            Text("Properties", style = HdTheme.typography.titleLarge, color = HdTheme.colors.ink)
-        }
-        if (selection is Selection.Room || selection is Selection.Furniture) {
-            OutlinedTextField(
-                value = name,
-                onValueChange = {
-                    name = it
-                    onRename(it)
-                },
-                label = { Text("Name") },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
-            )
-        } else {
-            Text(
-                name.ifBlank { "Selection" },
-                style = HdTheme.typography.titleMedium,
-                color = HdTheme.colors.ink,
-            )
-        }
-
-        if (wall != null) {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                FilterChip(
-                    selected = kotlin.math.abs(wall.thickness - interiorThicknessCM) < 0.1,
-                    onClick = onInterior,
-                    label = { Text("Interior 10") },
-                )
-                FilterChip(
-                    selected = kotlin.math.abs(wall.thickness - exteriorThicknessCM) < 0.1,
-                    onClick = onExterior,
-                    label = { Text("Exterior 20") },
-                )
-            }
-        }
-
-        TextButton(onClick = onDelete) {
-            Icon(Icons.Outlined.Delete, contentDescription = null, tint = HdTheme.colors.destructive)
-            Spacer(Modifier.width(8.dp))
-            Text("Delete", color = HdTheme.colors.destructive)
-        }
     }
 }
 

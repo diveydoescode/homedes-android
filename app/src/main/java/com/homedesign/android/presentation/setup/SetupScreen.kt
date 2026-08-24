@@ -31,6 +31,7 @@ import com.homedesign.android.core.ui.components.SerifHeadline
 import com.homedesign.android.core.ui.components.UnderlineField
 import com.homedesign.android.core.ui.components.UnitChoiceCard
 import com.homedesign.android.core.ui.theme.HdTheme
+import com.homedesign.android.domain.model.UnitSystem
 import com.homedesign.android.domain.settings.SettingsRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
@@ -41,17 +42,17 @@ import kotlinx.coroutines.launch
 class SetupViewModel @Inject constructor(
     private val settingsRepository: SettingsRepository,
 ) : ViewModel() {
-    suspend fun load(): Pair<String, String> {
+    suspend fun load(): Triple<String, String, UnitSystem> {
         val s = settingsRepository.settings.first()
-        return s.firstName to s.lastName
+        return Triple(s.firstName, s.lastName, s.unitSystem)
     }
 
     fun saveIdentity(first: String, last: String) {
         viewModelScope.launch { settingsRepository.setIdentity(first, last) }
     }
 
-    fun saveMetric(metric: Boolean) {
-        viewModelScope.launch { settingsRepository.setUseMetric(metric) }
+    fun saveUnitSystem(unit: UnitSystem) {
+        viewModelScope.launch { settingsRepository.setUnitSystem(unit) }
     }
 }
 
@@ -64,14 +65,15 @@ fun SetupScreen(
     var step by remember { mutableIntStateOf(1) }
     var firstName by remember { mutableStateOf("") }
     var lastName by remember { mutableStateOf("") }
-    var metric by remember { mutableStateOf(true) }
+    var unit by remember { mutableStateOf(UnitSystem.Millimetre) }
     var hydrated by remember { mutableStateOf(false) }
 
     androidx.compose.runtime.LaunchedEffect(Unit) {
         if (!hydrated) {
-            val (f, l) = viewModel.load()
+            val (f, l, u) = viewModel.load()
             firstName = f
             lastName = l
+            unit = u
             hydrated = true
         }
     }
@@ -130,28 +132,45 @@ fun SetupScreen(
                     placeholder = "Last",
                 )
             } else {
-                SerifHeadline(lead = "Millimetres or", italic = "inches?")
+                SerifHeadline(lead = "How should we", italic = "measure?")
                 Spacer(Modifier.height(10.dp))
                 androidx.compose.material3.Text(
-                    text = "Wall lengths, areas, every measurement. Change it any time in Settings.",
+                    text = "Wall lengths, areas, every measurement. Switch any time with mm / cm / ft in the editor.",
                     style = HdTheme.typography.bodyMedium,
                     color = HdTheme.colors.stone,
                 )
                 Spacer(Modifier.height(24.dp))
                 UnitChoiceCard(
-                    title = "Metric",
-                    sample = "425 cm · 21.6 m²",
-                    detail = "Centimetres, metres, square metres",
-                    selected = metric,
-                    onClick = { metric = true },
+                    title = "Millimetres",
+                    sample = "4250 mm · 21.6 m²",
+                    detail = "Precision drafting — default",
+                    selected = unit == UnitSystem.Millimetre,
+                    onClick = {
+                        unit = UnitSystem.Millimetre
+                        viewModel.saveUnitSystem(UnitSystem.Millimetre)
+                    },
                 )
                 Spacer(Modifier.height(12.dp))
                 UnitChoiceCard(
-                    title = "Imperial",
+                    title = "Centimetres",
+                    sample = "425 cm · 21.6 m²",
+                    detail = "Metric lengths and square metres",
+                    selected = unit == UnitSystem.Metric,
+                    onClick = {
+                        unit = UnitSystem.Metric
+                        viewModel.saveUnitSystem(UnitSystem.Metric)
+                    },
+                )
+                Spacer(Modifier.height(12.dp))
+                UnitChoiceCard(
+                    title = "Feet & inches",
                     sample = "14′ 0″ · 232 ft²",
-                    detail = "Feet, inches, square feet",
-                    selected = !metric,
-                    onClick = { metric = false },
+                    detail = "Imperial lengths and square feet",
+                    selected = unit == UnitSystem.Imperial,
+                    onClick = {
+                        unit = UnitSystem.Imperial
+                        viewModel.saveUnitSystem(UnitSystem.Imperial)
+                    },
                 )
             }
         }
@@ -164,7 +183,7 @@ fun SetupScreen(
                     viewModel.saveIdentity(firstName.trim(), lastName.trim())
                     step = 2
                 } else {
-                    viewModel.saveMetric(metric)
+                    viewModel.saveUnitSystem(unit)
                     onContinue()
                 }
             },
