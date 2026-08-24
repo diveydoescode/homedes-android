@@ -66,8 +66,7 @@ Plan units: **cm**, origin top-left, **+Y down** (same invariants as web).
 | GET | `/api/sketch/{id}/file` | download bytes |
 | POST | `/api/sketch/{id}/cancel` | cancel |
 
-Base URL default: `https://homedes-webapp.vercel.app`  
-Override: `SKETCH_BASE_URL` in `local.properties` / BuildConfig.
+Base URL: **debug** defaults to `http://10.0.2.2:8787` (local mock via `scripts/run-sketch-proxy.ps1`); **release** always `https://homedes-webapp.vercel.app`. Debug override: `sketch.base.url` in `local.properties`.
 
 ## Design tokens
 
