@@ -27,18 +27,68 @@ On Windows PowerShell:
 .\gradlew.bat :app:assembleDebug
 ```
 
-## SKETCH_BASE_URL
+## Agent auto-launch (no manual steps)
 
-Sketch convert calls go to the Vercel webapp proxy (no API key in the app).
+Scripts under `scripts/` set `JAVA_HOME` / `ANDROID_HOME` and wrap Gradle + adb:
 
-- **Default:** `https://homedes-webapp.vercel.app`
-- **Override:** set in `local.properties`:
+| Script | Purpose |
+|--------|---------|
+| `.\scripts\dev-up.ps1` | Assemble (+tests) → install → launch (starts emulator if none) |
+| `.\scripts\assemble.ps1 [-Test]` | Debug APK (+ unit tests) |
+| `.\scripts\install-launch.ps1` | `adb install -r` + start `com.homedesign.android.debug` |
+| `.\scripts\ensure-emulator.ps1` | Boot first AVD if no device |
+| `.\scripts\screenshot.ps1` / `dump-ui.ps1` / `tap.ps1` / `logcat.ps1` | Device control |
+| `.\scripts\run-sketch-proxy.ps1` | Local `/api/sketch` mock for debug |
 
-```properties
-sketch.base.url=https://homedes-webapp.vercel.app
+```powershell
+cd C:\webapp_android\homedes-android
+.\scripts\dev-up.ps1 -StartEmulator -SkipTests
+# optional sketch mock:
+.\scripts\run-sketch-proxy.ps1
+.\scripts\dev-up.ps1 -SketchProxy
 ```
 
-The value is baked into `BuildConfig.SKETCH_BASE_URL` at compile time (see `app/build.gradle.kts`). Retrofit base URL is that host; endpoints are `api/sketch`, `api/sketch/{id}`, `api/sketch/{id}/file`, `api/sketch/{id}/cancel`.
+### MCP connector (`homedes-adb`)
+
+Project MCP server at `tools/homedes-adb-mcp/` is registered in `.grok/config.toml`. After opening this repo in Grok, tools like `hd_dev_up`, `hd_screenshot`, `hd_ui_dump`, `hd_tap`, `hd_logcat`, `hd_assemble` are available for autonomous install/launch/debug.
+
+```powershell
+cd tools\homedes-adb-mcp
+npm.cmd install
+node src\doctor.mjs
+```
+
+Debug package: `com.homedesign.android.debug`  
+Activity: `com.homedesign.android.MainActivity`
+
+## SKETCH_BASE_URL / `sketch.base.url`
+
+Sketch convert calls go to a **proxy host** (no API key in the APK). Retrofit uses `BuildConfig.SKETCH_BASE_URL` as the base URL; relative paths are `api/sketch`, `api/sketch/{id}`, `api/sketch/{id}/file`, `api/sketch/{id}/cancel`.
+
+| Variant | `SKETCH_BASE_URL` |
+|---------|-------------------|
+| **debug** (default) | `http://10.0.2.2:8787` — emulator → host local mock |
+| **debug** override | `sketch.base.url` in **`local.properties`** (gitignored) |
+| **release** | always `https://homedes-webapp.vercel.app` (ignores `local.properties`) |
+
+### Local mock E2E (debug)
+
+```powershell
+# From homedes-android/
+.\scripts\run-sketch-proxy.ps1
+# or standalone mock only (same /api/sketch contract on :8787):
+.\scripts\run-sketch-proxy.ps1 -Standalone
+```
+
+That starts `homedes-webapp/server/mock-upstream.mjs` (+ `proxy.mjs` in default mode). Debug builds already default to `http://10.0.2.2:8787` and allow cleartext HTTP. Physical device: set `sketch.base.url=http://<LAN-IP>:8787` and rebuild.
+
+```properties
+# local.properties — optional debug override (release ignores this)
+sdk.dir=C:\\Users\\you\\AppData\\Local\\Android\\Sdk
+sketch.base.url=http://10.0.2.2:8787
+```
+
+**Vercel status:** the public site still serves SPA-only; **`https://homedes-webapp.vercel.app/api/sketch` returns 404** until the webapp API routes are redeployed. Local mock covers Android sketch E2E in the meantime.
 
 ## Architecture
 
@@ -89,9 +139,9 @@ Copied from `homedes-webapp/public/`.
 - Dashboard: search/sort, blank project, open, delete; Room stores `.homedesign` archives + thumbs
 - Editor: plan canvas (grid, rooms, mitered walls, furniture, openings, dims), pan/pinch, select, draw wall, draw room, place catalog furniture, undo/redo, 3s autosave, property sheet, export DXF/PDF/`.homedesign` via FileProvider
 - Domain ports: models, catalog, geom kernel (walls/rooms/openings/snap/hit-test), undo, zip codec
-- Sketch flow UI + Retrofit client → `https://homedes-webapp.vercel.app/api/sketch` (override with `sketch.base.url`)
+- Sketch flow UI + Retrofit client; debug → local mock (`scripts/run-sketch-proxy.ps1`), release → Vercel origin
 
 **Notes**
-- If Vercel `/api/sketch` returns 404, set `sketch.base.url` to a working proxy (or your local `server/proxy.mjs`). The UI still runs; convert needs a live backend.
-- Some advanced web geom modules are deferred (full curve mutation, furniture arrange/align, full DXF R2018 shell parity). See mapping doc.
+- Sketch: local mock E2E works via **SKETCH_BASE_URL** section above; live Vercel `/api/sketch` still needs deploy.
+- Remaining deferred geom vs web: multi-span curve breakpoint UX, FurnitureFacing / symbol classifier. See `resume.md` §6–7.
 - Dark theme follows system / DataStore preference using HD editorial + architect tokens.
