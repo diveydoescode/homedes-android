@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -25,8 +26,10 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.CameraAlt
@@ -260,7 +263,8 @@ fun DashboardScreen(
     var showNewSheet by remember { mutableStateOf(false) }
     var sortMenu by remember { mutableStateOf(false) }
     var overlay by remember { mutableStateOf<ProjectOverlay?>(null) }
-    val sheetState = rememberModalBottomSheetState()
+    // Expand fully so "Sample .sh3d" / "From sketch" are not clipped on phone heights.
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val snackbar = remember { SnackbarHostState() }
 
     val pickHomedesign = rememberLauncherForActivityResult(
@@ -460,7 +464,13 @@ fun DashboardScreen(
             sheetState = sheetState,
             containerColor = HdTheme.colors.ivory,
         ) {
-            Column(Modifier.padding(horizontal = 24.dp, vertical = 8.dp)) {
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .navigationBarsPadding()
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 24.dp, vertical = 8.dp),
+            ) {
                 Text("Start a design", style = HdTheme.typography.headlineSmall, color = HdTheme.colors.ink)
                 Spacer(Modifier.height(16.dp))
                 NewActionRow(
