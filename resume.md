@@ -1,6 +1,6 @@
 # HomeDesign Android — Resume State
 
-**Last updated:** 2026-08-24 (agent auto-launch + `homedes-adb` MCP; product near-complete)  
+**Last updated:** 2026-08-26 (MCP device QA pass; editor phone chrome + Back handling)  
 **Repo:** https://github.com/diveydoescode/homedes-android (`main`)  
 **Local path:** `C:\webapp_android\homedes-android`  
 **Companion sources:**
@@ -299,7 +299,7 @@ Everything else in-repo is done or explicitly closed (incl. crown moulding — n
 |----------|------|--------|
 | 1 | **Catalog-library 3D meshes without SH3D** | Pieces from `generic.json` / `.sh3f` with no embedded OBJ still use procedural meshes. Need a catalog mesh pack or OBJ mapping. |
 | 2 | **Vercel `/api/sketch` deploy** | Android client + local mock are done. Live `https://homedes-webapp.vercel.app/api/sketch` is still **404** — deploy webapp API (outside this APK). |
-| 3 | **Device QA via MCP** | Run full journey on emulator/phone with `hd_*` tools; fix regressions found that way. |
+| 3 | **Device QA follow-ups** | Deeper paths still light: draw-wall chain, openings slide/resize, furniture stamp, export share sheet, AR on real device, sketch mock E2E. Prefer screenshot Y for top chrome taps — UIAutomator Y for Compose top bar is unreliable. |
 
 ### Done recently (do not redo)
 
@@ -308,3 +308,7 @@ Everything else in-repo is done or explicitly closed (incl. crown moulding — n
 - [x] SH3D OBJ + MTL/`map_Kd` textures in Filament  
 - [x] AR occlusion (Depth API + plane clip fallback)  
 - [x] Local sketch mock proxy for debug E2E  
+- [x] **MCP device QA (2026-08-26)** — emulator bring-up; dashboard; Showcase villa editor; 2D/3D/Walk; Add sheet; room property sheet; catalog picker; unit tests green  
+- [x] **Editor phone chrome** — two-row top bar so title / floor / file stay visible; mode + units on second row  
+- [x] **Back handling** — dismiss Add/Catalog sheets, then clear selection, before leaving editor  
+- [x] **Script encoding** — ASCII-only ellipsis/em-dash in `install-launch.ps1` / `dev-up.ps1` / `ensure-emulator.ps1` (PowerShell parse break on Windows)  
