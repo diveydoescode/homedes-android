@@ -69,6 +69,26 @@ object HdSfIcons {
     @DrawableRes val cameraAperture = R.drawable.sf_camera_aperture
     @DrawableRes val sunMax = R.drawable.sf_sun_max
     @DrawableRes val sunMaxFill = R.drawable.sf_sun_max_fill
+    // Dashboard / New design / journey chrome
+    @DrawableRes val magnifyingglass = R.drawable.sf_magnifyingglass
+    @DrawableRes val xmark = R.drawable.sf_xmark
+    @DrawableRes val squareDashed = R.drawable.sf_square_dashed
+    @DrawableRes val squareGrid2x2 = R.drawable.sf_square_grid_2x2
+    @DrawableRes val globe = R.drawable.sf_globe
+    @DrawableRes val arrowRight = R.drawable.sf_arrow_right
+    @DrawableRes val checkmark = R.drawable.sf_checkmark
+    @DrawableRes val pencil = R.drawable.sf_pencil
+    @DrawableRes val houseFill = R.drawable.sf_house_fill
+    @DrawableRes val houseLodgeFill = R.drawable.sf_house_lodge_fill
+    @DrawableRes val building2Fill = R.drawable.sf_building_2_fill
+    @DrawableRes val buildingColumnsFill = R.drawable.sf_building_columns_fill
+    @DrawableRes val personCropCircle = R.drawable.sf_person_crop_circle
+    @DrawableRes val ellipsisCircle = R.drawable.sf_ellipsis_circle
+    @DrawableRes val photo = R.drawable.sf_photo
+    @DrawableRes val photoFill = R.drawable.sf_photo_fill
+    @DrawableRes val photoOnRectangle = R.drawable.sf_photo_on_rectangle
+    @DrawableRes val cameraFill = R.drawable.sf_camera_fill
+    @DrawableRes val squareAndArrowDown = R.drawable.sf_square_and_arrow_down
 }
 
 @Composable

@@ -17,9 +17,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.ArrowBack
-import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -31,6 +28,8 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
+import com.homedesign.android.core.ui.HdSfIcons
+import com.homedesign.android.core.ui.SfIcon
 import com.homedesign.android.core.ui.theme.HdSerif
 import com.homedesign.android.core.ui.theme.HdTheme
 
@@ -134,10 +133,11 @@ fun InkPlateButton(
             color = HdTheme.colors.paper,
         )
         if (showArrow) {
-            Text(
-                text = "→",
-                style = HdTheme.typography.labelLarge,
-                color = HdTheme.colors.paper,
+            SfIcon(
+                HdSfIcons.arrowRight,
+                contentDescription = null,
+                tint = HdTheme.colors.paper,
+                size = 14.dp,
             )
         }
     }
@@ -146,10 +146,11 @@ fun InkPlateButton(
 @Composable
 fun JourneyBackButton(onClick: () -> Unit) {
     IconButton(onClick = onClick) {
-        Icon(
-            imageVector = Icons.AutoMirrored.Outlined.ArrowBack,
+        SfIcon(
+            HdSfIcons.chevronBackward,
             contentDescription = "Back",
             tint = HdTheme.colors.ink,
+            size = 17.dp,
         )
     }
 }

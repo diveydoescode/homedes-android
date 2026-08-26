@@ -35,24 +35,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Add
-import androidx.compose.material.icons.outlined.Apartment
-import androidx.compose.material.icons.outlined.CameraAlt
-import androidx.compose.material.icons.outlined.Close
-import androidx.compose.material.icons.outlined.Cottage
-import androidx.compose.material.icons.outlined.FolderOpen
-import androidx.compose.material.icons.outlined.Home
-import androidx.compose.material.icons.outlined.Hotel
-import androidx.compose.material.icons.outlined.KeyboardArrowDown
-import androidx.compose.material.icons.outlined.OtherHouses
-import androidx.compose.material.icons.outlined.MoreVert
-import androidx.compose.material.icons.outlined.Search
+import androidx.annotation.DrawableRes
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
@@ -73,7 +60,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontStyle
@@ -89,6 +75,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
+import com.homedesign.android.core.ui.HdSfIcons
+import com.homedesign.android.core.ui.SfIcon
 import com.homedesign.android.core.ui.hdGlassCapsule
 import com.homedesign.android.core.ui.relativeTime
 import com.homedesign.android.core.ui.theme.HdTheme
@@ -441,6 +429,7 @@ fun DashboardScreen(
                 NewActionRow(
                     title = "Blank floor plan",
                     subtitle = "Start from an empty canvas",
+                    iconRes = HdSfIcons.squareDashed,
                     onClick = {
                         showNewSheet = false
                         viewModel.createBlank(onOpenProject)
@@ -450,7 +439,8 @@ fun DashboardScreen(
                 NewActionRow(
                     title = "From a sketch",
                     subtitle = "Photograph a hand-drawn plan",
-                    icon = true,
+                    iconRes = HdSfIcons.cameraViewfinder,
+                    pill = "AI",
                     onClick = {
                         showNewSheet = false
                         onOpenSketch()
@@ -459,8 +449,8 @@ fun DashboardScreen(
                 Spacer(Modifier.height(8.dp))
                 NewActionRow(
                     title = "From a template",
-                    subtitle = "Showcase villa, sample plans, imports…",
-                    folder = true,
+                    subtitle = "Modern flat, bedroom, loft…",
+                    iconRes = HdSfIcons.squareGrid2x2,
                     onClick = {
                         showNewSheet = false
                         showTemplateSheet = true
@@ -484,11 +474,38 @@ fun DashboardScreen(
                     .verticalScroll(rememberScrollState())
                     .padding(horizontal = 22.dp, vertical = 8.dp),
             ) {
-                Text("From a template", style = HdTheme.typography.headlineSmall, color = HdTheme.colors.ink)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.Top,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Text(
+                        "From a template",
+                        style = HdTheme.typography.headlineSmall,
+                        color = HdTheme.colors.ink,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Box(
+                        modifier = Modifier
+                            .size(32.dp)
+                            .clip(CircleShape)
+                            .background(HdTheme.colors.sand)
+                            .clickable { showTemplateSheet = false },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        SfIcon(
+                            HdSfIcons.xmark,
+                            contentDescription = "Close",
+                            tint = HdTheme.colors.stone,
+                            size = 14.dp,
+                        )
+                    }
+                }
                 Spacer(Modifier.height(16.dp))
                 NewActionRow(
                     title = "Showcase villa",
                     subtitle = "Sample plan with curved wall & rooms",
+                    iconRes = HdSfIcons.houseFill,
                     onClick = {
                         showTemplateSheet = false
                         viewModel.openShowcase(onOpenProject)
@@ -498,7 +515,7 @@ fun DashboardScreen(
                 NewActionRow(
                     title = "Sample .sh3d",
                     subtitle = "Bundled test plan (walls & furniture)",
-                    folder = true,
+                    iconRes = HdSfIcons.folder,
                     onClick = {
                         showTemplateSheet = false
                         viewModel.openSampleSh3d(onOpenProject)
@@ -508,7 +525,7 @@ fun DashboardScreen(
                 NewActionRow(
                     title = "Open .homedesign",
                     subtitle = "Import a plan from storage",
-                    folder = true,
+                    iconRes = HdSfIcons.squareAndArrowDown,
                     onClick = {
                         showTemplateSheet = false
                         pickHomedesign.launch("*/*")
@@ -518,7 +535,7 @@ fun DashboardScreen(
                 NewActionRow(
                     title = "Open .sh3d",
                     subtitle = "Import walls, rooms, furniture from archive",
-                    folder = true,
+                    iconRes = HdSfIcons.folder,
                     onClick = {
                         showTemplateSheet = false
                         pickSh3d.launch("*/*")
@@ -584,7 +601,20 @@ fun DashboardScreen(
                             viewModel.rename(current.meta.id, current.draftName)
                             overlay = null
                         },
-                    ) { Text("Done") }
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            SfIcon(
+                                HdSfIcons.checkmark,
+                                contentDescription = null,
+                                tint = HdTheme.colors.terracotta,
+                                size = 14.dp,
+                            )
+                            Text("Done")
+                        }
+                    }
                 },
                 dismissButton = {
                     TextButton(
@@ -592,7 +622,18 @@ fun DashboardScreen(
                             overlay = ProjectOverlay.ConfirmDelete(current.meta)
                         },
                     ) {
-                        Text("Delete", color = HdTheme.colors.destructive)
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            SfIcon(
+                                HdSfIcons.trash,
+                                contentDescription = null,
+                                tint = HdTheme.colors.destructive,
+                                size = 14.dp,
+                            )
+                            Text("Delete", color = HdTheme.colors.destructive)
+                        }
                     }
                 },
             )
@@ -600,6 +641,22 @@ fun DashboardScreen(
         is ProjectOverlay.ConfirmDelete -> {
             AlertDialog(
                 onDismissRequest = { overlay = null },
+                icon = {
+                    Box(
+                        modifier = Modifier
+                            .size(52.dp)
+                            .clip(CircleShape)
+                            .background(HdTheme.colors.terracotta.copy(alpha = 0.12f)),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        SfIcon(
+                            HdSfIcons.trash,
+                            contentDescription = null,
+                            tint = HdTheme.colors.terracotta,
+                            size = 20.dp,
+                        )
+                    }
+                },
                 title = { Text("Delete design?") },
                 text = {
                     Text("Delete ${current.meta.name}? This cannot be undone.")
@@ -631,18 +688,12 @@ private fun EmptyDesigns(onStart: () -> Unit) {
             .padding(top = 90.dp, bottom = 24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Box(
-            modifier = Modifier
-                .size(56.dp)
-                .border(1.dp, HdTheme.colors.stone.copy(alpha = 0.45f), RoundedCornerShape(8.dp)),
-            contentAlignment = Alignment.Center,
-        ) {
-            Box(
-                Modifier
-                    .size(28.dp)
-                    .border(1.dp, HdTheme.colors.stone.copy(alpha = 0.35f), RoundedCornerShape(4.dp)),
-            )
-        }
+        SfIcon(
+            HdSfIcons.squareDashed,
+            contentDescription = null,
+            tint = HdTheme.colors.stone,
+            size = 38.dp,
+        )
         Spacer(Modifier.height(16.dp))
         Text("No designs yet", style = HdTheme.typography.headlineSmall, color = HdTheme.colors.ink)
         Spacer(Modifier.height(8.dp))
@@ -705,20 +756,32 @@ private fun HeroCard(
                 onClick = onMore,
                 modifier = Modifier.align(Alignment.TopEnd),
             ) {
-                Icon(
-                    Icons.Outlined.MoreVert,
+                SfIcon(
+                    HdSfIcons.ellipsis,
                     contentDescription = "More for ${meta.name}",
                     tint = HdTheme.colors.ink,
+                    size = 18.dp,
                 )
             }
         }
         Spacer(Modifier.height(14.dp))
-        Text(
-            text = "Continue",
-            style = HdTheme.typography.labelMedium,
-            color = HdTheme.colors.terracotta,
-            fontWeight = FontWeight.SemiBold,
-        )
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Text(
+                text = "Continue",
+                style = HdTheme.typography.labelMedium,
+                color = HdTheme.colors.terracotta,
+                fontWeight = FontWeight.SemiBold,
+            )
+            SfIcon(
+                HdSfIcons.arrowRight,
+                contentDescription = null,
+                tint = HdTheme.colors.terracotta,
+                size = 11.dp,
+            )
+        }
         Spacer(Modifier.height(4.dp))
         Text(meta.name, style = HdTheme.typography.titleLarge, color = HdTheme.colors.ink)
         Text(
@@ -768,10 +831,11 @@ private fun ProjectCard(
                 onClick = onMore,
                 modifier = Modifier.align(Alignment.TopEnd),
             ) {
-                Icon(
-                    Icons.Outlined.MoreVert,
+                SfIcon(
+                    HdSfIcons.ellipsis,
                     contentDescription = "More for ${meta.name}",
                     tint = HdTheme.colors.ink,
+                    size = 18.dp,
                 )
             }
         }
@@ -823,43 +887,73 @@ private fun PlanThumbImage(meta: ProjectMeta, modifier: Modifier = Modifier) {
 private fun NewActionRow(
     title: String,
     subtitle: String,
+    @DrawableRes iconRes: Int,
     onClick: () -> Unit,
-    icon: Boolean = false,
-    folder: Boolean = false,
+    pill: String? = null,
 ) {
-    val glyph = when {
-        folder -> Icons.Outlined.FolderOpen
-        icon -> Icons.Outlined.CameraAlt
-        else -> Icons.Outlined.Add
-    }
+    val tile = RoundedCornerShape(10.dp)
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(14.dp))
-            .background(HdTheme.colors.paper)
-            .border(1.dp, HdTheme.colors.hairline, RoundedCornerShape(14.dp))
+            .background(HdTheme.colors.ivory)
+            .border(0.5.dp, HdTheme.colors.hairline, RoundedCornerShape(14.dp))
             .clickable(onClick = onClick)
-            .padding(16.dp),
+            .padding(14.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         Box(
             modifier = Modifier
-                .size(42.dp)
-                .clip(RoundedCornerShape(10.dp))
-                .background(HdTheme.colors.tintWarm),
+                .size(40.dp)
+                .clip(tile)
+                .background(HdTheme.colors.paper)
+                .border(0.5.dp, HdTheme.colors.hairline, tile),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(
-                imageVector = glyph,
+            SfIcon(
+                iconRes,
                 contentDescription = null,
-                tint = HdTheme.colors.terracotta,
+                tint = HdTheme.colors.ink,
+                size = 18.dp,
             )
         }
-        Column {
-            Text(title, style = HdTheme.typography.titleMedium, color = HdTheme.colors.ink)
+        Column(modifier = Modifier.weight(1f)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(
+                    title,
+                    style = HdTheme.typography.titleMedium.copy(
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Medium,
+                    ),
+                    color = HdTheme.colors.ink,
+                )
+                if (pill != null) {
+                    Text(
+                        text = pill,
+                        style = HdTheme.typography.labelSmall.copy(
+                            fontSize = 9.5.sp,
+                            fontWeight = FontWeight.Medium,
+                        ),
+                        color = HdTheme.colors.paper,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(HdTheme.colors.terracotta)
+                            .padding(horizontal = 6.dp, vertical = 2.dp),
+                    )
+                }
+            }
             Text(subtitle, style = HdTheme.typography.bodySmall, color = HdTheme.colors.stone)
         }
+        SfIcon(
+            HdSfIcons.chevronRight,
+            contentDescription = null,
+            tint = HdTheme.colors.stone,
+            size = 13.dp,
+        )
     }
 }
 
@@ -950,11 +1044,11 @@ private fun DashboardChrome(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                Icon(
-                    Icons.Outlined.Search,
+                SfIcon(
+                    HdSfIcons.magnifyingglass,
                     contentDescription = null,
                     tint = HdTheme.colors.stone,
-                    modifier = Modifier.size(16.dp),
+                    size = 13.dp,
                 )
                 Box(
                     modifier = Modifier
@@ -984,14 +1078,19 @@ private fun DashboardChrome(
                     )
                 }
                 if (search.isNotEmpty()) {
-                    Icon(
-                        Icons.Outlined.Close,
-                        contentDescription = "Clear search",
-                        tint = HdTheme.colors.stone,
+                    Box(
                         modifier = Modifier
                             .size(16.dp)
                             .clickable { onSearch("") },
-                    )
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        SfIcon(
+                            HdSfIcons.xmarkCircleFill,
+                            contentDescription = "Clear search",
+                            tint = HdTheme.colors.stone,
+                            size = 14.dp,
+                        )
+                    }
                 }
             }
 
@@ -1013,11 +1112,11 @@ private fun DashboardChrome(
                         ),
                         color = HdTheme.colors.ink,
                     )
-                    Icon(
-                        Icons.Outlined.KeyboardArrowDown,
+                    SfIcon(
+                        HdSfIcons.chevronDown,
                         contentDescription = null,
                         tint = HdTheme.colors.ink,
-                        modifier = Modifier.size(10.dp),
+                        size = 9.dp,
                     )
                 }
                 DropdownMenu(expanded = sortMenu, onDismissRequest = { onSortMenu(false) }) {
@@ -1088,31 +1187,31 @@ private fun ShowcaseSection(
             ShowcaseCard(
                 name = "Villa Bianca",
                 blurb = "Italian one-storey · 3 beds",
-                icon = Icons.Outlined.Home,
+                iconRes = HdSfIcons.houseFill,
                 onClick = onOpenVilla,
             )
             ShowcaseCard(
                 name = "Villa Aurelia",
                 blurb = "Italian villa · patio fountain",
-                icon = Icons.Outlined.OtherHouses,
+                iconRes = HdSfIcons.houseLodgeFill,
                 onClick = onOpenVilla,
             )
             ShowcaseCard(
                 name = "Sample plan",
                 blurb = "Bundled test plan · walls & furniture",
-                icon = Icons.Outlined.Apartment,
+                iconRes = HdSfIcons.building2Fill,
                 onClick = onOpenSample,
             )
             ShowcaseCard(
                 name = "English Villa",
                 blurb = "Classic English home",
-                icon = Icons.Outlined.Cottage,
+                iconRes = HdSfIcons.houseLodgeFill,
                 onClick = onOpenSample,
             )
             ShowcaseCard(
                 name = "Alpine Hotel",
                 blurb = "Chalet hotel · many rooms",
-                icon = Icons.Outlined.Hotel,
+                iconRes = HdSfIcons.buildingColumnsFill,
                 onClick = onOpenSample,
             )
         }
@@ -1123,7 +1222,7 @@ private fun ShowcaseSection(
 private fun ShowcaseCard(
     name: String,
     blurb: String,
-    icon: ImageVector,
+    @DrawableRes iconRes: Int,
     onClick: () -> Unit,
 ) {
     val thumb = RoundedCornerShape(14.dp)
@@ -1148,11 +1247,11 @@ private fun ShowcaseCard(
                 .border(0.5.dp, HdTheme.colors.hairline, thumb),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(
-                imageVector = icon,
+            SfIcon(
+                iconRes,
                 contentDescription = null,
                 tint = HdTheme.colors.terracotta,
-                modifier = Modifier.size(34.dp),
+                size = 34.dp,
             )
         }
         Column(
@@ -1222,11 +1321,11 @@ private fun NewDesignFab(
                 .clickable(onClick = onClick),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(
-                imageVector = Icons.Outlined.Add,
+            SfIcon(
+                HdSfIcons.plus,
                 contentDescription = "New design",
                 tint = HdTheme.colors.paper,
-                modifier = Modifier.size(22.dp),
+                size = 22.dp,
             )
         }
     }

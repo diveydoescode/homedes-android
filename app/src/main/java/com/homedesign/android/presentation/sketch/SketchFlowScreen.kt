@@ -24,14 +24,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.CameraAlt
-import androidx.compose.material.icons.outlined.Close
-import androidx.compose.material.icons.outlined.PhotoLibrary
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
+import com.homedesign.android.core.ui.HdSfIcons
+import com.homedesign.android.core.ui.SfIcon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -475,7 +472,7 @@ fun SketchPickerScreen(
         ) {
             JourneyEyebrow("AI · Sketch import")
             IconButton(onClick = onClose) {
-                Icon(Icons.Outlined.Close, contentDescription = "Close", tint = HdTheme.colors.ink)
+                SfIcon(HdSfIcons.xmark, contentDescription = "Close", tint = HdTheme.colors.ink, size = 18.dp)
             }
         }
         Spacer(Modifier.height(16.dp))
@@ -887,10 +884,11 @@ private fun SourceRow(
                 .background(HdTheme.colors.paper.copy(alpha = 0.12f)),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(
-                imageVector = if (camera) Icons.Outlined.CameraAlt else Icons.Outlined.PhotoLibrary,
+            SfIcon(
+                id = if (camera) HdSfIcons.cameraFill else HdSfIcons.photoOnRectangle,
                 contentDescription = null,
                 tint = HdTheme.colors.paper,
+                size = 22.dp,
             )
         }
         Column {

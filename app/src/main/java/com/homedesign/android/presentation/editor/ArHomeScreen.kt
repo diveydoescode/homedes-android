@@ -26,8 +26,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.ViewInAr
+import com.homedesign.android.core.ui.HdSfIcons
+import com.homedesign.android.core.ui.SfIcon
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
@@ -234,11 +234,11 @@ fun ArHomeScreen(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    Icon(
-                        Icons.Outlined.ViewInAr,
+                    SfIcon(
+                        HdSfIcons.arkit,
                         contentDescription = null,
                         tint = HdTheme.colors.terracotta,
-                        modifier = Modifier.size(48.dp),
+                        size = 48.dp,
                     )
                     Text(
                         "Camera permission needed",

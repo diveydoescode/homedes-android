@@ -26,4 +26,19 @@
 8. Right-edge tool rail. **Done** (`PlanToolRail` ivory circles)
 9. MCP screenshot compare. **Done** (`artifacts/ui-port-editor-v3.png`, Add sheet verified)
 
+## Dashboard
+
+SF Symbol icons 1:1 vs `HomeDashboardView` / `HDSampleData`. **Done**
+
+| Surface | iOS | Android |
+|---------|-----|---------|
+| Search / clear / sort | magnifyingglass · xmark.circle.fill · chevron.down | `HdSfIcons` same |
+| FAB | plus 22pt medium | `SfIcon(plus, 22.dp)` |
+| Card overflow | ellipsis | `SfIcon(ellipsis)` |
+| New design sheet | square.dashed · camera.viewfinder+AI · square.grid.2x2 · chevron.right; 40×40 paper tile | `NewActionRow(@DrawableRes)` |
+| Showcase | house.fill / house.lodge.fill / building.2.fill / building.columns.fill | same drawables |
+| Template / import rows | folder · square.and.arrow.down · xmark close | same |
+| Empty state | square.dashed | same |
+| Journey chrome | chevron.backward · arrow.right | `JourneyChrome` SF |
+
 *Out of scope this pass:* iOS 26 morph glass animations; catalog mesh art; designer pixel zip beyond this audit.
