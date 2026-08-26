@@ -1,6 +1,6 @@
 # HomeDesign Android — Resume State
 
-**Last updated:** 2026-08-26 (Kyant Backdrop liquid glass + iOS New design sheet; AGP 9.1 toolchain)  
+**Last updated:** 2026-08-26 (pushed main; structures + labels + texture embed; sketch deploy docs)  
 **Repo:** https://github.com/diveydoescode/homedes-android (`main`)  
 **Local path:** `C:\webapp_android\homedes-android`  
 **Companion sources:**
@@ -297,9 +297,11 @@ Everything else in-repo is done or explicitly closed (incl. crown moulding — n
 
 | Priority | Item | Notes |
 |----------|------|--------|
-| 1 | **Catalog-library 3D meshes without SH3D** | Pieces from `generic.json` / `.sh3f` with no embedded OBJ still use procedural meshes. Need a catalog mesh pack or OBJ mapping. |
-| 2 | **Vercel `/api/sketch` deploy** | Android client + local mock are done. Live `https://homedes-webapp.vercel.app/api/sketch` is still **404** — deploy webapp API (outside this APK). |
-| 3 | **Device QA follow-ups** | Deeper paths still light: draw-wall chain, openings slide/resize, furniture stamp, export share sheet, AR on real device, sketch mock E2E. Prefer screenshot Y for top chrome taps — UIAutomator Y for Compose top bar is unreliable. |
+| 1 | **Catalog-library 3D meshes without SH3D** | **Deferred** — user will supply a mesh pack. Procedural / structure primitives remain until then. |
+| 2 | **Vercel `/api/sketch` deploy** | **Blocked here (no Vercel access).** Docs: `docs/SKETCH_VERCEL_DEPLOY.md` + webapp `DEPLOY.md`. Live origin still 404 until ops deploys. |
+| 3 | **iOS functional parity leftovers** | Stage room / room lighting, AR drag+D-pad+1:1, stair floor cutouts, Filament point lights, pegman walk-here, roof styles, opening dressings. Structures + labels + texture zip embed shipped 2026-08-26. |
+| 4 | **Device QA follow-ups** | Draw-wall chain, openings slide/resize, furniture stamp, export share, AR on real device, sketch mock E2E, structure/label smoke. |
+| 5 | **UI designer pass** | Handoff zip: `artifacts/ui-designer-handoff.zip` — await annotated guidelines for pixel-identical chrome. |
 
 ### Done recently (do not redo)
 
