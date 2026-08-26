@@ -82,6 +82,10 @@ fun computePlanBounds(home: Home, levelId: String?): PlanBounds? {
         if (levelId != null && dim.level != levelId) continue
         for (pt in dimensionPoints(dim)) grow(pt.x, pt.y)
     }
+    for (label in home.labels) {
+        if (levelId != null && label.level != levelId) continue
+        grow(label.x, label.y)
+    }
     if (!any) return null
     return PlanBounds(minX, minY, maxX, maxY)
 }

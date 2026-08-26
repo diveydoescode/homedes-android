@@ -47,6 +47,7 @@ import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.Layers
 import androidx.compose.material.icons.outlined.Straighten
 import androidx.compose.material.icons.outlined.ViewQuilt
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -54,6 +55,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -97,6 +99,7 @@ import com.homedesign.android.core.ui.hdGlassChrome
 import com.homedesign.android.core.ui.hdLayerBackdrop
 import com.homedesign.android.core.ui.rememberHdLayerBackdrop
 import com.homedesign.android.core.ui.theme.HdTheme
+import com.homedesign.android.domain.catalog.StructureCatalog
 import com.homedesign.android.domain.catalog.catalogById
 import com.homedesign.android.domain.geom.LevelMutation
 import com.homedesign.android.domain.geom.OpeningKind
@@ -137,6 +140,7 @@ fun EditorScreen(
     var showAdd by remember { mutableStateOf(false) }
     var showCatalog by remember { mutableStateOf(false) }
     var catalogReplaceMode by remember { mutableStateOf(false) }
+    var labelDraft by remember { mutableStateOf("") }
     /** null = floor; "left"/"right" = wall side finish. */
     var pendingTextureImport by remember { mutableStateOf<String?>(null) }
     val snackbar = remember { SnackbarHostState() }
@@ -792,6 +796,16 @@ fun EditorScreen(
             )
         }
 
+        if (showPlanChrome && state.tool is EditorTool.PlaceLabel && state.pendingLabelPoint == null) {
+            PlaceLabelBanner(
+                onCancel = { viewModel.setTool(EditorTool.Select) },
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .statusBarsPadding()
+                    .padding(top = TopChromeClearance),
+            )
+        }
+
         if (showPlanChrome && state.tool is EditorTool.FormatPainter) {
             FormatPainterBanner(
                 onCancel = { viewModel.setTool(EditorTool.Select) },
@@ -860,6 +874,7 @@ fun EditorScreen(
                         onOpeningWidth = viewModel::setOpeningWidth,
                         onFlipHinge = viewModel::flipOpeningHinge,
                         onFlipSwing = viewModel::flipOpeningSwing,
+                        onToggleOpeningOpen = viewModel::toggleOpeningOpen,
                         onFurnitureWidth = viewModel::setFurnitureWidth,
                         onFurnitureDepth = viewModel::setFurnitureDepth,
                         onFurnitureAngleDeg = viewModel::setFurnitureAngleDeg,
@@ -940,6 +955,7 @@ fun EditorScreen(
                         onOpeningWidth = viewModel::setOpeningWidth,
                         onFlipHinge = viewModel::flipOpeningHinge,
                         onFlipSwing = viewModel::flipOpeningSwing,
+                        onToggleOpeningOpen = viewModel::toggleOpeningOpen,
                         onFurnitureWidth = viewModel::setFurnitureWidth,
                         onFurnitureDepth = viewModel::setFurnitureDepth,
                         onFurnitureAngleDeg = viewModel::setFurnitureAngleDeg,
@@ -1018,12 +1034,55 @@ fun EditorScreen(
                     catalogReplaceMode = false
                     showCatalog = true
                 },
+                onPlaceStructure = { id ->
+                    showAdd = false
+                    viewModel.recordRecentFurniture(id)
+                    viewModel.setTool(EditorTool.PlaceFurniture(id))
+                },
+                onPlaceLabel = {
+                    showAdd = false
+                    viewModel.setTool(EditorTool.PlaceLabel)
+                },
                 onTrace = {
                     showAdd = false
                     pickTrace.launch("image/*")
                 },
             )
         }
+    }
+
+    val pendingLabel = state.pendingLabelPoint
+    if (pendingLabel != null) {
+        AlertDialog(
+            onDismissRequest = { viewModel.cancelPlaceLabel() },
+            title = { Text("New label", color = HdTheme.colors.ink) },
+            text = {
+                OutlinedTextField(
+                    value = labelDraft,
+                    onValueChange = { labelDraft = it },
+                    label = { Text("Text") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.confirmPlaceLabel(labelDraft)
+                        labelDraft = ""
+                    },
+                    enabled = labelDraft.trim().isNotEmpty(),
+                ) { Text("Add") }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.cancelPlaceLabel()
+                        labelDraft = ""
+                    },
+                ) { Text("Cancel") }
+            },
+        )
     }
 
     if (showCatalog) {
@@ -1170,6 +1229,37 @@ private fun FloorSelectorButton(
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun PlaceLabelBanner(
+    onCancel: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier
+            .clip(RoundedCornerShape(999.dp))
+            .background(HdTheme.colors.ivory.copy(alpha = 0.94f))
+            .border(1.dp, HdTheme.colors.hairline, RoundedCornerShape(999.dp))
+            .padding(horizontal = 12.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text(
+            text = "Tap plan to place a label",
+            style = HdTheme.typography.labelMedium,
+            color = HdTheme.colors.architectInk,
+        )
+        Text(
+            text = "Done",
+            style = HdTheme.typography.labelSmall,
+            color = HdTheme.colors.selectionDeep,
+            modifier = Modifier
+                .clip(RoundedCornerShape(999.dp))
+                .clickable(onClick = onCancel)
+                .padding(horizontal = 8.dp, vertical = 6.dp),
+        )
     }
 }
 
@@ -1387,6 +1477,8 @@ private fun AddSheetContent(
     onWindow: () -> Unit,
     onFrench: () -> Unit,
     onFurniture: () -> Unit,
+    onPlaceStructure: (String) -> Unit,
+    onPlaceLabel: () -> Unit,
     onTrace: () -> Unit,
 ) {
     val intLabel = UnitFormat.length(interiorThicknessCM, unitSystem)
@@ -1408,6 +1500,34 @@ private fun AddSheetContent(
         SheetRow("Dimension", "Tap two points", onDimension)
         SheetRow("Exterior dims", "Auto-chain outer face dimensions for this level", onExteriorDims)
         SheetRow("Furniture…", "Pick from the catalog", onFurniture)
+        Text(
+            "Structure",
+            style = HdTheme.typography.titleSmall,
+            color = HdTheme.colors.ink,
+            modifier = Modifier.padding(top = 8.dp),
+        )
+        SheetRow("Round pillar", "Floor to ceiling · tap to place", {
+            onPlaceStructure(StructureCatalog.pillarRoundID)
+        })
+        SheetRow("Square pillar", "Floor to ceiling · tap to place", {
+            onPlaceStructure(StructureCatalog.pillarSquareID)
+        })
+        SheetRow("Ceiling beam", "Hangs at the ceiling · tap to place", {
+            onPlaceStructure(StructureCatalog.beamID)
+        })
+        SheetRow("Wall mirror", "Wall-hung · tap to place", {
+            onPlaceStructure(StructureCatalog.mirrorID)
+        })
+        SheetRow("Garden path", "Floor · tap to place", {
+            onPlaceStructure(StructureCatalog.pathID)
+        })
+        SheetRow("Railing", "Floor · tap to place", {
+            onPlaceStructure(StructureCatalog.railingID)
+        })
+        SheetRow("Rug", "Floor · tap to place", {
+            onPlaceStructure(StructureCatalog.rugID)
+        })
+        SheetRow("Text label", "Tap the plan, then type", onPlaceLabel)
         SheetRow("Trace photo…", "Photo under the plan at 35% opacity", onTrace)
         Spacer(Modifier.height(16.dp))
     }

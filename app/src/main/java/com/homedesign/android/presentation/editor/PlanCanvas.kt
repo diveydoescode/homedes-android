@@ -381,6 +381,7 @@ fun PlanCanvas(
                             (tool is EditorTool.Dimension ||
                                 tool is EditorTool.PlaceFurniture ||
                                 tool is EditorTool.PlaceOpening ||
+                                tool is EditorTool.PlaceLabel ||
                                 tool is EditorTool.FormatPainter) && pastSlop -> {
                                 dragged = true
                                 panX += change.position.x - change.previousPosition.x
@@ -539,6 +540,7 @@ fun PlanCanvas(
         val furniture = home.furniture.filter { it.visible && (level == null || it.level == level) }
         val openings = home.doorsAndWindows.filter { level == null || it.piece.level == level }
         val dims = home.dimensionLines.filter { level == null || it.level == level }
+        val labels = home.labels.filter { level == null || it.level == level }
         val wallsById = walls.associateBy { it.id }
         val cutoutsByWall = WallSegmentation.cutoutsByWallID(walls, openings)
 
@@ -816,12 +818,41 @@ fun PlanCanvas(
                 val kindFill = symbolKindFill(kind, furnitureFill, terracotta)
                 val fill = if (selected) selectionColor.copy(alpha = 0.35f) else kindFill
                 val strokeColor = if (selected) selectionColor else terracotta.copy(alpha = 0.95f)
-                drawPath(path, fill)
-                drawPath(
-                    path,
-                    strokeColor,
-                    style = Stroke(width = if (selected) max(1.75f, 1.75f / max(scale, 0.001f)) else 2f),
-                )
+                val roundPillar = kind == FurnitureSymbolKind.Pillar &&
+                    (
+                        piece.catalogID?.contains("round", ignoreCase = true) == true ||
+                            (piece.name ?: entry?.name).orEmpty().contains("round", ignoreCase = true)
+                    )
+                if (roundPillar) {
+                    val center = planToScreen(piece.x, piece.y, scale)
+                    withTransform({
+                        translate(center.x, center.y)
+                        rotate(Math.toDegrees(piece.angle).toFloat(), pivot = Offset.Zero)
+                    }) {
+                        val rx = ((piece.widthInPlan ?: piece.width) / 2.0 * scale).toFloat()
+                        val ry = ((piece.depthInPlan ?: piece.depth) / 2.0 * scale).toFloat()
+                        drawOval(
+                            color = fill,
+                            topLeft = Offset(-rx, -ry),
+                            size = Size(rx * 2f, ry * 2f),
+                        )
+                        drawOval(
+                            color = strokeColor,
+                            topLeft = Offset(-rx, -ry),
+                            size = Size(rx * 2f, ry * 2f),
+                            style = Stroke(
+                                width = if (selected) max(1.75f, 1.75f / max(scale, 0.001f)) else 2f,
+                            ),
+                        )
+                    }
+                } else {
+                    drawPath(path, fill)
+                    drawPath(
+                        path,
+                        strokeColor,
+                        style = Stroke(width = if (selected) max(1.75f, 1.75f / max(scale, 0.001f)) else 2f),
+                    )
+                }
                 val label = entry?.name ?: piece.name.orEmpty()
                 if (label.isNotBlank()) {
                     drawLabel(
@@ -922,6 +953,20 @@ fun PlanCanvas(
                 sizeSp = 10f,
                 paper = paper,
                 chip = true,
+            )
+        }
+
+        for (label in labels) {
+            if (label.pitch != null && abs(label.pitch) >= 0.01) continue
+            val selected =
+                selection is Selection.Annotation && selection.isLabel && selection.id == label.id
+            drawLabel(
+                text = label.text,
+                at = planToScreen(label.x, label.y, scale),
+                color = if (selected) selectionColor else ink.copy(alpha = 0.75f),
+                sizeSp = 13f,
+                paper = paper,
+                chip = selected,
             )
         }
 
@@ -1362,10 +1407,15 @@ private fun symbolKindFill(kind: FurnitureSymbolKind, sand: Color, terracotta: C
         -> Color(0xFF9FB8CC).copy(alpha = 0.35f)
         FurnitureSymbolKind.Plant,
         FurnitureSymbolKind.Rug,
+        FurnitureSymbolKind.Path,
         -> Color(0xFFA8B5A0).copy(alpha = 0.40f)
         FurnitureSymbolKind.Lamp,
         FurnitureSymbolKind.Chandelier,
         -> Color(0xFFE8C547).copy(alpha = 0.28f)
+        FurnitureSymbolKind.Pillar,
+        FurnitureSymbolKind.Beam,
+        FurnitureSymbolKind.Railing,
+        -> terracotta.copy(alpha = 0.30f)
         else -> sand.copy(alpha = 0.85f)
     }
 

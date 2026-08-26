@@ -82,6 +82,7 @@ fun PropertySheetContent(
     onOpeningWidth: (Double) -> Unit,
     onFlipHinge: () -> Unit,
     onFlipSwing: () -> Unit,
+    onToggleOpeningOpen: () -> Unit = {},
     onFurnitureWidth: (Double) -> Unit,
     onFurnitureDepth: (Double) -> Unit,
     onFurnitureAngleDeg: (Double) -> Unit,
@@ -193,6 +194,7 @@ fun PropertySheetContent(
                 onOpeningWidth = onOpeningWidth,
                 onFlipHinge = onFlipHinge,
                 onFlipSwing = onFlipSwing,
+                onToggleOpen = onToggleOpeningOpen,
                 onDelete = onDelete,
             )
             furniture != null -> FurniturePropertyBody(
@@ -658,6 +660,7 @@ private fun OpeningPropertyBody(
     onOpeningWidth: (Double) -> Unit,
     onFlipHinge: () -> Unit,
     onFlipSwing: () -> Unit,
+    onToggleOpen: () -> Unit = {},
     onDelete: () -> Unit,
 ) {
     Text(
@@ -677,6 +680,9 @@ private fun OpeningPropertyBody(
     Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
         TextButton(onClick = onFlipHinge) { Text("Flip hinge") }
         TextButton(onClick = onFlipSwing) { Text("Flip swing") }
+    }
+    TextButton(onClick = onToggleOpen) {
+        Text(if (opening.isOpen) "Close" else "Open")
     }
     DeleteRow(onDelete)
 }

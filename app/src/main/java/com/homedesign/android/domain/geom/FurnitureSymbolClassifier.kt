@@ -34,6 +34,10 @@ enum class FurnitureSymbolKind {
     Chandelier,
     Mirror,
     Stairs,
+    Pillar,
+    Beam,
+    Path,
+    Railing,
     Generic,
 }
 
@@ -44,7 +48,8 @@ object FurnitureSymbolClassifier {
     private val cache = LinkedHashMap<String, FurnitureSymbolKind>(64, 0.75f, true)
 
     fun classify(piece: HomePieceOfFurniture, entry: CatalogEntry? = null): FurnitureSymbolKind {
-        val cacheKey = "${piece.name.orEmpty()}\u0001${entry?.name.orEmpty()}\u0001${entry?.category.orEmpty()}"
+        val cacheKey =
+            "${piece.name.orEmpty()}\u0001${piece.catalogID.orEmpty()}\u0001${entry?.name.orEmpty()}\u0001${entry?.category.orEmpty()}"
         cache[cacheKey]?.let { return it }
         val result = classifyUncached(piece, entry)
         if (cache.size >= CACHE_LIMIT) cache.clear()
@@ -63,6 +68,9 @@ object FurnitureSymbolClassifier {
             FurnitureSymbolKind.Sink,
             FurnitureSymbolKind.Tv,
             FurnitureSymbolKind.Mirror,
+            FurnitureSymbolKind.Beam,
+            FurnitureSymbolKind.Path,
+            FurnitureSymbolKind.Railing,
             -> SymbolAxis.Width
             FurnitureSymbolKind.Bed,
             FurnitureSymbolKind.Toilet,
@@ -85,8 +93,16 @@ object FurnitureSymbolClassifier {
     private fun classifyUncached(piece: HomePieceOfFurniture, entry: CatalogEntry?): FurnitureSymbolKind {
         val name = piece.name.orEmpty()
         val entryName = entry?.name.orEmpty()
-        val text = " $name $entryName ".lowercase()
+        val catalogId = piece.catalogID.orEmpty()
+        val text = " $name $entryName $catalogId ".lowercase()
         val category = (entry?.category.orEmpty()).lowercase()
+
+        structureKind(catalogId)?.let { return it }
+
+        if (any(text, listOf("pillar", "column"))) return FurnitureSymbolKind.Pillar
+        if (any(text, listOf("railing", "banister", "handrail"))) return FurnitureSymbolKind.Railing
+        if (any(text, listOf("garden path", "garden-path"))) return FurnitureSymbolKind.Path
+        if (any(text, listOf("ceiling beam"))) return FurnitureSymbolKind.Beam
 
         if (any(text, listOf("toilet", "lavatory", "water closet", " wc "))) return FurnitureSymbolKind.Toilet
         if (any(text, listOf("bathtub", "bath tub", "jacuzzi", "whirlpool"))) return FurnitureSymbolKind.Bathtub
@@ -156,10 +172,26 @@ object FurnitureSymbolClassifier {
         }
         if (any(text, listOf("light"))) return FurnitureSymbolKind.Lamp
         if (any(text, listOf("stair", "staircase", "steps", "escalier"))) return FurnitureSymbolKind.Stairs
+        if (any(text, listOf("beam"))) return FurnitureSymbolKind.Beam
+        if (any(text, listOf(" path", "path "))) return FurnitureSymbolKind.Path
 
         if (category.contains("staircase")) return FurnitureSymbolKind.Stairs
         if (category.contains("light")) return FurnitureSymbolKind.Lamp
         return FurnitureSymbolKind.Generic
+    }
+
+    private fun structureKind(catalogId: String): FurnitureSymbolKind? {
+        if (!catalogId.startsWith("structure#")) return null
+        val id = catalogId.lowercase()
+        return when {
+            id.contains("pillar") -> FurnitureSymbolKind.Pillar
+            id.contains("beam") -> FurnitureSymbolKind.Beam
+            id.contains("path") -> FurnitureSymbolKind.Path
+            id.contains("railing") -> FurnitureSymbolKind.Railing
+            id.contains("rug") -> FurnitureSymbolKind.Rug
+            id.contains("mirror") -> FurnitureSymbolKind.Mirror
+            else -> FurnitureSymbolKind.Generic
+        }
     }
 
     private fun any(text: String, keys: List<String>): Boolean = keys.any { text.contains(it) }

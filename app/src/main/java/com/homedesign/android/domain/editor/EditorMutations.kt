@@ -1,6 +1,7 @@
 package com.homedesign.android.domain.editor
 
 import com.homedesign.android.domain.catalog.CatalogEntry
+import com.homedesign.android.domain.catalog.StructureCatalog
 import com.homedesign.android.domain.geom.FurnitureGroupMove
 import com.homedesign.android.domain.geom.FurnitureReplace
 import com.homedesign.android.domain.geom.FurnitureSnap
@@ -37,6 +38,7 @@ import com.homedesign.android.domain.model.Baseboard
 import com.homedesign.android.domain.model.CeilingStyle
 import com.homedesign.android.domain.model.Home
 import com.homedesign.android.domain.model.HomePieceOfFurniture
+import com.homedesign.android.domain.model.PlanLabel
 import com.homedesign.android.domain.model.Selection
 import com.homedesign.android.domain.model.WallTexture
 import com.homedesign.android.domain.textures.TexturePreset
@@ -286,7 +288,26 @@ fun applyOpeningSlideToPoint(home: Home, openingID: String, wallID: String, x: D
 }
 
 fun applyPlaceFurniture(home: Home, entry: CatalogEntry, x: Double, y: Double): Home {
-    val elevation = PlacementDefaults.defaultElevation(entry.name, entry.height, home.wallHeight)
+    val levelHeight = home.levels.firstOrNull { it.id == home.selectedLevelID }?.height
+        ?: home.wallHeight
+    var elevation = PlacementDefaults.defaultElevation(entry.name, entry.height, levelHeight)
+    var height = entry.height
+    var color: String? = null
+    // MH-1 — structural semantics: pillars span floor→ceiling; beams hang
+    // at the ceiling; mirrors mount on the wall; rugs ship terracotta.
+    when {
+        StructureCatalog.isFloorToCeiling(entry.id) -> {
+            elevation = 0.0
+            height = levelHeight
+        }
+        StructureCatalog.isCeilingHung(entry.id) -> {
+            elevation = maxOf(0.0, levelHeight - entry.height)
+        }
+        StructureCatalog.isWallHung(entry.id) -> {
+            elevation = PlacementDefaults.defaultElevation("mirror", entry.height, levelHeight)
+        }
+    }
+    if (entry.id == StructureCatalog.rugID) color = StructureCatalog.rugColor
     var piece = HomePieceOfFurniture(
         id = UUID.randomUUID().toString(),
         catalogID = entry.id,
@@ -297,7 +318,8 @@ fun applyPlaceFurniture(home: Home, entry: CatalogEntry, x: Double, y: Double): 
         angle = 0.0,
         width = entry.width,
         depth = entry.depth,
-        height = entry.height,
+        height = height,
+        color = color,
         movable = entry.movable,
         visible = true,
         modelMirrored = false,
@@ -592,6 +614,23 @@ fun applyOpeningWidth(home: Home, openingID: String, widthCM: Double): Home {
         doorsAndWindows = home.doorsAndWindows.map { o ->
             if (o.piece.id == openingID) o.copy(piece = o.piece.copy(width = widthCM)) else o
         },
+        topologyVersion = home.topologyVersion + 1,
+    )
+}
+
+fun applyPlaceLabel(home: Home, x: Double, y: Double, text: String): Home {
+    val trimmed = text.trim()
+    if (trimmed.isEmpty()) return home
+    val label = PlanLabel(
+        id = UUID.randomUUID().toString(),
+        x = x,
+        y = y,
+        text = trimmed,
+        angle = 0.0,
+        level = home.selectedLevelID,
+    )
+    return home.copy(
+        labels = home.labels + label,
         topologyVersion = home.topologyVersion + 1,
     )
 }

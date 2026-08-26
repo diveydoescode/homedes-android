@@ -142,7 +142,7 @@ val FURNITURE_CATEGORIES = listOf(
 )
 
 @Volatile
-private var catalogEntriesCache: List<CatalogEntry> = BUILTIN_CATALOG_ENTRIES
+private var catalogEntriesCache: List<CatalogEntry> = mergeStructureCatalog(BUILTIN_CATALOG_ENTRIES)
 
 /** Active catalog (builtin until [installCatalogEntries] runs). */
 val CATALOG_ENTRIES: List<CatalogEntry>
@@ -150,7 +150,15 @@ val CATALOG_ENTRIES: List<CatalogEntry>
 
 fun installCatalogEntries(entries: List<CatalogEntry>) {
     if (entries.isEmpty()) return
-    catalogEntriesCache = entries
+    catalogEntriesCache = mergeStructureCatalog(entries)
 }
 
-fun catalogById(id: String): CatalogEntry? = catalogEntriesCache.find { it.id == id }
+fun catalogById(id: String): CatalogEntry? =
+    catalogEntriesCache.find { it.id == id } ?: StructureCatalog.byId(id)
+
+/** Keep procedural structure built-ins even after `generic.json` replaces the catalog. */
+internal fun mergeStructureCatalog(entries: List<CatalogEntry>): List<CatalogEntry> {
+    val ids = entries.mapTo(HashSet()) { it.id }
+    val extra = StructureCatalog.entries.filter { it.id !in ids }
+    return if (extra.isEmpty()) entries else entries + extra
+}

@@ -1,5 +1,6 @@
 package com.homedesign.android.domain.geom
 
+import com.homedesign.android.domain.catalog.StructureCatalog
 import com.homedesign.android.domain.model.HomePieceOfFurniture
 import com.homedesign.android.domain.model.Wall
 import kotlin.math.cos
@@ -23,7 +24,7 @@ object WallClearance {
 
     /** Built-in structure ids sit IN walls on purpose. */
     private fun isStructure(catalogID: String?): Boolean =
-        catalogID != null && catalogID.startsWith("structure#")
+        StructureCatalog.isStructure(catalogID)
 
     /**
      * Conservative mount class from the display name. Wall keywords run

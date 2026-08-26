@@ -19,6 +19,8 @@ sealed interface EditorTool {
     data class PlaceOpening(val kind: com.homedesign.android.domain.geom.OpeningKind) : EditorTool
     /** Copy wall finishes onto the next tapped wall(s). */
     data class FormatPainter(val sourceWallID: String) : EditorTool
+    /** Tap the plan, then type the annotation text. */
+    data object PlaceLabel : EditorTool
 }
 
 /** One-shot plan camera fit request (Stage this room / Fit). */
@@ -115,4 +117,6 @@ data class EditorUiState(
     val showEditorTip: Boolean = false,
     /** PlanCanvas zooms/pans to these bounds when [CameraFocusRequest.token] changes. */
     val cameraFocus: CameraFocusRequest? = null,
+    /** Plan-cm point waiting for the New label dialog (PlaceLabel tool). */
+    val pendingLabelPoint: Vec2? = null,
 )

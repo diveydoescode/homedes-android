@@ -80,6 +80,34 @@ class FurnitureSymbolClassifierTest {
     }
 
     @Test
+    fun structureIdsClassifyByCatalog() {
+        assertEquals(
+            FurnitureSymbolKind.Pillar,
+            FurnitureSymbolClassifier.classify(piece("Round pillar").copy(catalogID = "structure#pillar-round")),
+        )
+        assertEquals(
+            FurnitureSymbolKind.Beam,
+            FurnitureSymbolClassifier.classify(piece("Ceiling beam").copy(catalogID = "structure#beam")),
+        )
+        assertEquals(
+            FurnitureSymbolKind.Path,
+            FurnitureSymbolClassifier.classify(piece("Garden path").copy(catalogID = "structure#garden-path")),
+        )
+        assertEquals(
+            FurnitureSymbolKind.Railing,
+            FurnitureSymbolClassifier.classify(piece("Railing").copy(catalogID = "structure#railing")),
+        )
+        assertEquals(
+            FurnitureSymbolKind.Rug,
+            FurnitureSymbolClassifier.classify(piece("Rug").copy(catalogID = "structure#rug")),
+        )
+        assertEquals(
+            FurnitureSymbolKind.Mirror,
+            FurnitureSymbolClassifier.classify(piece("Wall mirror").copy(catalogID = "structure#mirror")),
+        )
+    }
+
+    @Test
     fun genericForUnknown() {
         assertEquals(
             FurnitureSymbolKind.Generic,

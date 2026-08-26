@@ -32,6 +32,7 @@ import com.homedesign.android.domain.editor.applyDistribute
 import com.homedesign.android.domain.editor.applyMirrorPlan
 import com.homedesign.android.domain.editor.applyMirrorSelection
 import com.homedesign.android.domain.editor.applyPlaceFurniture
+import com.homedesign.android.domain.editor.applyPlaceLabel
 import com.homedesign.android.domain.editor.applyRotatePlan
 import com.homedesign.android.domain.editor.applyRenameFurniture
 import com.homedesign.android.domain.editor.applyRenameRoom
@@ -277,7 +278,12 @@ class EditorViewModel @Inject constructor(
         dimensionStart = null
         document.setSelection(Selection.None)
         _state.update {
-            it.copy(tool = tool, selection = Selection.None, preview = DrawPreview.None)
+            it.copy(
+                tool = tool,
+                selection = Selection.None,
+                preview = DrawPreview.None,
+                pendingLabelPoint = null,
+            )
         }
     }
 
@@ -931,6 +937,22 @@ class EditorViewModel @Inject constructor(
 
     fun flipOpeningSwing() = flipOpening('y')
 
+    fun toggleOpeningOpen() {
+        val id = when (val sel = document.selection) {
+            is Selection.Opening -> sel.id
+            is Selection.OpeningHandle -> sel.id
+            else -> return
+        }
+        val home = document.home
+        val nextDoors = home.doorsAndWindows.map { d ->
+            if (d.piece.id == id) d.copy(isOpen = !d.isOpen) else d
+        }
+        if (nextDoors === home.doorsAndWindows) return
+        document.replaceHome(home.copy(doorsAndWindows = nextDoors))
+        markDirty(coalesce = false)
+        publish()
+    }
+
     private fun flipOpening(axis: Char) {
         val id = when (val sel = document.selection) {
             is Selection.Opening -> sel.id
@@ -1032,7 +1054,27 @@ class EditorViewModel @Inject constructor(
             is EditorTool.PlaceFurniture -> placeFurniture(tool.catalogId, plan, stamp = tool.stamp)
             is EditorTool.PlaceOpening -> placeOpening(tool.kind, plan, scalePxPerCm)
             is EditorTool.FormatPainter -> onFormatPainterTap(plan, scalePxPerCm, tool.sourceWallID)
+            EditorTool.PlaceLabel -> beginPlaceLabel(plan)
         }
+    }
+
+    private fun beginPlaceLabel(plan: Vec2) {
+        _state.update { it.copy(pendingLabelPoint = plan) }
+    }
+
+    fun confirmPlaceLabel(text: String) {
+        val point = _state.value.pendingLabelPoint ?: return
+        _state.update { it.copy(pendingLabelPoint = null) }
+        val next = applyPlaceLabel(document.home, point.x, point.y, text)
+        if (next === document.home) return
+        document.replaceHome(next)
+        markDirty(coalesce = false)
+        publish()
+    }
+
+    fun cancelPlaceLabel() {
+        if (_state.value.pendingLabelPoint == null) return
+        _state.update { it.copy(pendingLabelPoint = null) }
     }
 
     private fun onFormatPainterTap(plan: Vec2, scalePxPerCm: Float, sourceWallID: String) {
@@ -1322,7 +1364,10 @@ class EditorViewModel @Inject constructor(
                     appContext.contentResolver.openInputStream(uri)?.use { it.readBytes() }
                         ?: error("Could not read file")
                 }
-                val home = HomedesignZip.decode(bytes)
+                val home = HomedesignZip.decode(
+                    bytes,
+                    HomedesignZip.embeddedTextureDirectory(appContext.filesDir),
+                )
                 val meta = projectRepository.createFromHome(home)
                 onOpened(meta.id)
                 _events.tryEmit("Opened ${meta.name}")
@@ -1525,6 +1570,7 @@ class EditorViewModel @Inject constructor(
         val furniture = home.furniture.filter { it.visible && (level == null || it.level == level) }
         val openings = home.doorsAndWindows.filter { level == null || it.piece.level == level }
         val dims = home.dimensionLines.filter { level == null || it.level == level }
+        val labels = home.labels.filter { level == null || it.level == level }
 
         val epTol = hitEndpointPx / scale
         val wallTol = hitWallCoarsePx / scale
@@ -1588,6 +1634,11 @@ class EditorViewModel @Inject constructor(
         }
         HitTest.closestDimension(plan, dims, wallTol)?.let {
             document.setSelection(Selection.Annotation(it.id, isLabel = false))
+            selected()
+            return
+        }
+        HitTest.closestLabel(plan, labels, wallTol)?.let {
+            document.setSelection(Selection.Annotation(it.id, isLabel = true))
             selected()
             return
         }
