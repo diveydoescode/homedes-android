@@ -261,10 +261,13 @@ fun DashboardScreen(
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     var showNewSheet by remember { mutableStateOf(false) }
+    /** iOS "From a template" secondary sheet (showcase / sample / import). */
+    var showTemplateSheet by remember { mutableStateOf(false) }
     var sortMenu by remember { mutableStateOf(false) }
     var overlay by remember { mutableStateOf<ProjectOverlay?>(null) }
-    // Expand fully so "Sample .sh3d" / "From sketch" are not clipped on phone heights.
+    // Expand fully so template / import rows are not clipped on phone heights.
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val templateSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val snackbar = remember { SnackbarHostState() }
 
     val pickHomedesign = rememberLauncherForActivityResult(
@@ -458,76 +461,112 @@ fun DashboardScreen(
         )
     }
 
+    // iOS NewDesignSheet parity: Blank / From a sketch / From a template.
     if (showNewSheet) {
         ModalBottomSheet(
             onDismissRequest = { showNewSheet = false },
             sheetState = sheetState,
-            containerColor = HdTheme.colors.ivory,
+            containerColor = HdTheme.colors.paper,
         ) {
             Column(
                 Modifier
                     .fillMaxWidth()
                     .navigationBarsPadding()
                     .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 24.dp, vertical = 8.dp),
+                    .padding(horizontal = 22.dp, vertical = 8.dp),
             ) {
-                Text("Start a design", style = HdTheme.typography.headlineSmall, color = HdTheme.colors.ink)
+                Text("New design", style = HdTheme.typography.headlineSmall, color = HdTheme.colors.ink)
+                Text(
+                    "Three ways in.",
+                    style = HdTheme.typography.bodySmall,
+                    color = HdTheme.colors.stone,
+                    modifier = Modifier.padding(top = 6.dp),
+                )
                 Spacer(Modifier.height(16.dp))
                 NewActionRow(
-                    title = "Blank plan",
-                    subtitle = "Empty canvas with walls & rooms",
+                    title = "Blank floor plan",
+                    subtitle = "Start from an empty canvas",
                     onClick = {
                         showNewSheet = false
                         viewModel.createBlank(onOpenProject)
                     },
                 )
-                Spacer(Modifier.height(10.dp))
+                Spacer(Modifier.height(8.dp))
                 NewActionRow(
-                    title = "Open .homedesign",
-                    subtitle = "Import a plan from storage",
-                    folder = true,
-                    onClick = {
-                        showNewSheet = false
-                        pickHomedesign.launch("*/*")
-                    },
-                )
-                Spacer(Modifier.height(10.dp))
-                NewActionRow(
-                    title = "Open .sh3d",
-                    subtitle = "Import walls, rooms, furniture from archive",
-                    folder = true,
-                    onClick = {
-                        showNewSheet = false
-                        pickSh3d.launch("*/*")
-                    },
-                )
-                Spacer(Modifier.height(10.dp))
-                NewActionRow(
-                    title = "Showcase villa",
-                    subtitle = "Sample plan with curved wall & rooms",
-                    onClick = {
-                        showNewSheet = false
-                        viewModel.openShowcase(onOpenProject)
-                    },
-                )
-                Spacer(Modifier.height(10.dp))
-                NewActionRow(
-                    title = "Sample .sh3d",
-                    subtitle = "Bundled test plan (walls & furniture)",
-                    folder = true,
-                    onClick = {
-                        showNewSheet = false
-                        viewModel.openSampleSh3d(onOpenProject)
-                    },
-                )
-                Spacer(Modifier.height(10.dp))
-                NewActionRow(
-                    title = "From sketch",
+                    title = "From a sketch",
                     subtitle = "Photograph a hand-drawn plan",
                     icon = true,
                     onClick = {
                         showNewSheet = false
                         onOpenSketch()
+                    },
+                )
+                Spacer(Modifier.height(8.dp))
+                NewActionRow(
+                    title = "From a template",
+                    subtitle = "Showcase villa, sample plans, imports…",
+                    folder = true,
+                    onClick = {
+                        showNewSheet = false
+                        showTemplateSheet = true
+                    },
+                )
+                Spacer(Modifier.height(28.dp))
+            }
+        }
+    }
+
+    if (showTemplateSheet) {
+        ModalBottomSheet(
+            onDismissRequest = { showTemplateSheet = false },
+            sheetState = templateSheetState,
+            containerColor = HdTheme.colors.paper,
+        ) {
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .navigationBarsPadding()
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 22.dp, vertical = 8.dp),
+            ) {
+                Text("From a template", style = HdTheme.typography.headlineSmall, color = HdTheme.colors.ink)
+                Spacer(Modifier.height(16.dp))
+                NewActionRow(
+                    title = "Showcase villa",
+                    subtitle = "Sample plan with curved wall & rooms",
+                    onClick = {
+                        showTemplateSheet = false
+                        viewModel.openShowcase(onOpenProject)
+                    },
+                )
+                Spacer(Modifier.height(8.dp))
+                NewActionRow(
+                    title = "Sample .sh3d",
+                    subtitle = "Bundled test plan (walls & furniture)",
+                    folder = true,
+                    onClick = {
+                        showTemplateSheet = false
+                        viewModel.openSampleSh3d(onOpenProject)
+                    },
+                )
+                Spacer(Modifier.height(8.dp))
+                NewActionRow(
+                    title = "Open .homedesign",
+                    subtitle = "Import a plan from storage",
+                    folder = true,
+                    onClick = {
+                        showTemplateSheet = false
+                        pickHomedesign.launch("*/*")
+                    },
+                )
+                Spacer(Modifier.height(8.dp))
+                NewActionRow(
+                    title = "Open .sh3d",
+                    subtitle = "Import walls, rooms, furniture from archive",
+                    folder = true,
+                    onClick = {
+                        showTemplateSheet = false
+                        pickSh3d.launch("*/*")
                     },
                 )
                 Spacer(Modifier.height(28.dp))
