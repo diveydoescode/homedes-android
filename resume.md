@@ -299,7 +299,7 @@ Everything else in-repo is done or explicitly closed (incl. crown moulding — n
 |----------|------|--------|
 | 1 | **Catalog-library 3D meshes without SH3D** | **Deferred** — user will supply a mesh pack. Procedural / structure primitives remain until then. |
 | 2 | **Vercel `/api/sketch` deploy** | **Blocked here (no Vercel access).** Docs: `docs/SKETCH_VERCEL_DEPLOY.md` + webapp `DEPLOY.md`. Live origin still 404 until ops deploys. |
-| 3 | **iOS functional parity leftovers** | Stage room / room lighting, AR drag+D-pad+1:1, stair floor cutouts, Filament point lights, pegman walk-here, roof styles, opening dressings. Structures + labels + texture zip embed shipped 2026-08-26. |
+| 3 | **iOS functional parity leftovers** | Stage room / room lighting, AR drag+D-pad+1:1, Filament point lights, roof styles, opening dressings. Shipped: structures, labels, texture zip, stair cutouts, pegman walk-here, door Open/Close drives 3D. |
 | 4 | **Device QA follow-ups** | Draw-wall chain, openings slide/resize, furniture stamp, export share, AR on real device, sketch mock E2E, structure/label smoke. |
 | 5 | **UI designer pass** | Handoff zip: `artifacts/ui-designer-handoff.zip` — await annotated guidelines for pixel-identical chrome. |
 
@@ -320,3 +320,8 @@ Everything else in-repo is done or explicitly closed (incl. crown moulding — n
 - [x] **iOS dashboard chrome** — italic Designs + count, glass search/sort pills, Showcase row, 2-col grid, ink FAB ring  
 - [x] **iOS editor deck** — single glass top strip (units + mode icons + share + overflow + floor); dock Edit/Add/Catalog/Sketch/Walk/Undo/Redo  
 - [x] **Split on all widths** — phone vertical 3D↑/2D↓; wide side-by-side  
+- [x] **Structure tools + text labels** — Add sheet pillars/beam/mirror/path/railing/rug; PlaceLabel  
+- [x] **`.homedesign` texture embed** — wall/room surfaces in zip `assets/textures/`  
+- [x] **Stair floor cutouts** — `staircaseCutOut` punches hole in level above (3D)  
+- [x] **Pegman / Walk here** — Add → Walk here → tap plan; dock Walk uses pose  
+- [x] **Door Open/Close** — sheet toggle drives Filament leaf angle (no sine loop)  
