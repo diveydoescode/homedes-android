@@ -24,7 +24,7 @@ Write-Host "ANDROID_HOME: $env:ANDROID_HOME"
 
 $proxyProc = $null
 if ($SketchProxy) {
-    Write-Host ">> Starting sketch proxy in background…" -ForegroundColor Cyan
+    Write-Host ">> Starting sketch proxy in background..." -ForegroundColor Cyan
     $proxyProc = Start-Process -FilePath "powershell.exe" -ArgumentList @(
         "-NoProfile", "-ExecutionPolicy", "Bypass",
         "-File", (Join-Path $PSScriptRoot "run-sketch-proxy.ps1")
@@ -37,7 +37,7 @@ if ($StartEmulator) {
 } else {
     $devs = @(Get-HdDevices)
     if ($devs.Count -eq 0) {
-        Write-Host ">> No device; attempting emulator…" -ForegroundColor Yellow
+        Write-Host ">> No device; attempting emulator..." -ForegroundColor Yellow
         & "$PSScriptRoot\ensure-emulator.ps1" -Avd $Avd | Out-Null
     }
 }

@@ -17,7 +17,7 @@ if (-not $NoBuild) {
 }
 
 if (-not (Test-Path $DebugApk)) {
-    throw "APK missing: $DebugApk — run assemble first"
+    throw "APK missing: $DebugApk - run assemble first"
 }
 
 $serial = $Serial

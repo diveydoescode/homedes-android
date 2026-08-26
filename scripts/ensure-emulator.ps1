@@ -26,7 +26,7 @@ if (-not $Avd) {
     $Avd = ($avds | Select-Object -First 1).ToString().Trim()
 }
 
-Write-Host ">> Starting AVD '$Avd'…" -ForegroundColor Cyan
+Write-Host ">> Starting AVD '$Avd'..." -ForegroundColor Cyan
 $p = Start-Process -FilePath $Emulator -ArgumentList @("-avd", $Avd, "-netdelay", "none", "-netspeed", "full") -PassThru -WindowStyle Minimized
 Write-Host ">> emulator pid $($p.Id)"
 
