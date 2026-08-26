@@ -31,31 +31,13 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.ArrowBack
-import androidx.compose.material.icons.automirrored.outlined.Redo
-import androidx.compose.material.icons.automirrored.outlined.Undo
-import androidx.compose.material.icons.outlined.Add
-import androidx.compose.material.icons.outlined.CameraAlt
-import androidx.compose.material.icons.outlined.Close
-import androidx.compose.material.icons.outlined.DirectionsWalk
-import androidx.compose.material.icons.outlined.GridView
-import androidx.compose.material.icons.outlined.IosShare
-import androidx.compose.material.icons.outlined.KeyboardArrowDown
-import androidx.compose.material.icons.outlined.MoreVert
-import androidx.compose.material.icons.outlined.ViewInAr
-import androidx.compose.material.icons.outlined.Weekend
-import androidx.compose.material.icons.outlined.FileDownload
-import androidx.compose.material.icons.outlined.Image
-import androidx.compose.material.icons.outlined.Layers
-import androidx.compose.material.icons.outlined.Straighten
-import androidx.compose.material.icons.outlined.ViewQuilt
+import androidx.annotation.DrawableRes
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
@@ -71,11 +53,13 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
@@ -87,6 +71,7 @@ import androidx.compose.ui.input.key.isShiftPressed
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
@@ -98,6 +83,8 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.homedesign.android.core.ui.HdSfIcons
+import com.homedesign.android.core.ui.SfIcon
 import com.homedesign.android.core.ui.hdGlassCapsule
 import com.homedesign.android.core.ui.hdGlassChrome
 import com.homedesign.android.core.ui.hdLayerBackdrop
@@ -106,6 +93,8 @@ import com.homedesign.android.core.ui.theme.HdMono
 import com.homedesign.android.core.ui.theme.HdSans
 import com.homedesign.android.core.ui.theme.HdSerif
 import com.homedesign.android.core.ui.theme.HdTheme
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import com.homedesign.android.domain.catalog.StructureCatalog
 import com.homedesign.android.domain.catalog.catalogById
 import com.homedesign.android.domain.geom.LevelMutation
@@ -149,13 +138,17 @@ fun EditorScreen(
     var catalogReplaceMode by remember { mutableStateOf(false) }
     var labelDraft by remember { mutableStateOf("") }
     var furnitureBoxDraft by remember { mutableStateOf("") }
+    /** Phone wall sheet: peek (~96dp) vs expanded inspector. */
+    var wallSheetExpanded by remember { mutableStateOf(false) }
     /** null = floor; "left"/"right" = wall side finish. */
     var pendingTextureImport by remember { mutableStateOf<String?>(null) }
     val snackbar = remember { SnackbarHostState() }
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
-    val addSheetState = rememberModalBottomSheetState()
+    val addSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false)
     val catalogSheetState = rememberModalBottomSheetState()
+    val propsSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false)
+    val propsSheetScope = rememberCoroutineScope()
 
     val pickTrace = rememberLauncherForActivityResult(
         ActivityResultContracts.GetContent(),
@@ -492,10 +485,11 @@ fun EditorScreen(
                 },
                 modifier = Modifier.size(36.dp),
             ) {
-                Icon(
-                    Icons.AutoMirrored.Outlined.ArrowBack,
+                SfIcon(
+                    HdSfIcons.chevronBackward,
                     contentDescription = "Back to designs",
                     tint = HdTheme.colors.architectInk,
+                    size = 18.dp,
                 )
             }
             // iOS Deck title stack — fixed band so chrome controls cannot crush it to 0 width
@@ -542,11 +536,11 @@ fun EditorScreen(
                 onClick = { viewModel.exportPdf() },
                 modifier = Modifier.size(36.dp),
             ) {
-                Icon(
-                    Icons.Outlined.IosShare,
+                SfIcon(
+                    HdSfIcons.squareAndArrowUp,
                     contentDescription = "Share or export",
                     tint = HdTheme.colors.architectInk,
-                    modifier = Modifier.size(18.dp),
+                    size = 17.dp,
                 )
             }
             Box {
@@ -554,11 +548,11 @@ fun EditorScreen(
                     onClick = { exportOpen = true },
                     modifier = Modifier.size(36.dp),
                 ) {
-                    Icon(
-                        Icons.Outlined.MoreVert,
+                    SfIcon(
+                        HdSfIcons.ellipsis,
                         contentDescription = "More",
                         tint = HdTheme.colors.architectInk,
-                        modifier = Modifier.size(18.dp),
+                        size = 17.dp,
                     )
                 }
                 DropdownMenu(expanded = exportOpen, onDismissRequest = { exportOpen = false }) {
@@ -762,11 +756,10 @@ fun EditorScreen(
                             else viewModel.setTool(EditorTool.Dimension)
                         },
                     ) {
-                        Icon(
-                            if (measure) Icons.Outlined.Straighten else Icons.Outlined.GridView,
+                        SfIcon(
+                            if (measure) HdSfIcons.ruler else HdSfIcons.cursorarrow,
                             contentDescription = null,
                             tint = if (measure) HdTheme.colors.paper else HdTheme.colors.architectInk,
-                            modifier = Modifier.size(17.dp),
                         )
                     }
                     DockItem(
@@ -775,11 +768,10 @@ fun EditorScreen(
                         chevron = true,
                         onClick = { showAdd = true },
                     ) {
-                        Icon(
-                            Icons.Outlined.Add,
+                        SfIcon(
+                            HdSfIcons.plus,
                             contentDescription = null,
                             tint = HdTheme.colors.paper,
-                            modifier = Modifier.size(17.dp),
                         )
                     }
                     DockItem(
@@ -787,11 +779,10 @@ fun EditorScreen(
                         active = state.tool is EditorTool.PlaceFurniture,
                         onClick = { showCatalog = true },
                     ) {
-                        Icon(
-                            Icons.Outlined.Weekend,
+                        SfIcon(
+                            HdSfIcons.chairLounge,
                             contentDescription = null,
                             tint = HdTheme.colors.architectInk,
-                            modifier = Modifier.size(17.dp),
                         )
                     }
                     DockItem(
@@ -802,11 +793,10 @@ fun EditorScreen(
                             onOpenSketch()
                         },
                     ) {
-                        Icon(
-                            Icons.Outlined.CameraAlt,
+                        SfIcon(
+                            HdSfIcons.cameraViewfinder,
                             contentDescription = null,
                             tint = HdTheme.colors.architectInk,
-                            modifier = Modifier.size(17.dp),
                         )
                     }
                     DockItem(
@@ -814,15 +804,14 @@ fun EditorScreen(
                         active = state.viewMode == EditorViewMode.Walk,
                         onClick = { viewModel.setViewMode(EditorViewMode.Walk) },
                     ) {
-                        Icon(
-                            Icons.Outlined.DirectionsWalk,
+                        SfIcon(
+                            HdSfIcons.figureWalk,
                             contentDescription = null,
                             tint = if (state.viewMode == EditorViewMode.Walk) {
                                 HdTheme.colors.paper
                             } else {
                                 HdTheme.colors.architectInk
                             },
-                            modifier = Modifier.size(17.dp),
                         )
                     }
                     DockItem(
@@ -830,11 +819,10 @@ fun EditorScreen(
                         disabled = !state.canUndo,
                         onClick = { if (state.canUndo) viewModel.undo() },
                     ) {
-                        Icon(
-                            Icons.AutoMirrored.Outlined.Undo,
+                        SfIcon(
+                            HdSfIcons.arrowUturnBackward,
                             contentDescription = "Undo",
                             tint = HdTheme.colors.architectInk,
-                            modifier = Modifier.size(17.dp),
                         )
                     }
                     DockItem(
@@ -842,11 +830,10 @@ fun EditorScreen(
                         disabled = !state.canRedo,
                         onClick = { if (state.canRedo) viewModel.redo() },
                     ) {
-                        Icon(
-                            Icons.AutoMirrored.Outlined.Redo,
+                        SfIcon(
+                            HdSfIcons.arrowUturnForward,
                             contentDescription = "Redo",
                             tint = HdTheme.colors.architectInk,
-                            modifier = Modifier.size(17.dp),
                         )
                     }
                 }
@@ -859,6 +846,46 @@ fun EditorScreen(
                     .statusBarsPadding()
                     .padding(start = 10.dp, top = TopChromeClearance),
             )
+
+            // iOS PlanCanvasView right-edge tool circles
+            PlanToolRail(
+                selection = state.selection,
+                orthoLock = state.orthoLock,
+                drawWallActive = state.tool is EditorTool.DrawWall,
+                onFlipHinge = viewModel::flipOpeningHinge,
+                onFlipSwing = viewModel::flipOpeningSwing,
+                onWallStyle = viewModel::startFormatPainter,
+                onFit = viewModel::fitPlanToView,
+                onToggleOrtho = viewModel::toggleOrthoLock,
+                onToggleDrawWall = {
+                    if (state.tool is EditorTool.DrawWall) {
+                        viewModel.setTool(EditorTool.Select)
+                    } else {
+                        viewModel.setTool(EditorTool.DrawWall(defaultWallThicknessCM))
+                    }
+                },
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .statusBarsPadding()
+                    .padding(top = TopChromeClearance, end = 8.dp),
+            )
+
+            state.deleteToast?.let { toast ->
+                DeleteToastPill(
+                    message = toast.message,
+                    toastId = toast.id,
+                    onUndo = viewModel::undo,
+                    onExpire = viewModel::consumeDeleteToast,
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .navigationBarsPadding()
+                        .padding(bottom = 96.dp),
+                )
+            }
+        }
+
+        LaunchedEffect(state.selection) {
+            wallSheetExpanded = false
         }
 
         if (showPlanChrome && placeTool != null) {
@@ -1001,86 +1028,7 @@ fun EditorScreen(
                     )
                 }
             } else {
-                // Phone: peek sheet — cap height so the plan stays visible (iOS inspector).
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.BottomCenter)
-                        .navigationBarsPadding()
-                        .padding(start = 12.dp, end = 12.dp, bottom = 108.dp)
-                        .fillMaxWidth()
-                        .heightIn(max = 280.dp)
-                        .wrapContentHeight(align = Alignment.Bottom)
-                        .clip(RoundedCornerShape(18.dp))
-                        .background(HdTheme.colors.ivory.copy(alpha = 0.96f))
-                        .border(1.dp, HdTheme.colors.hairline, RoundedCornerShape(18.dp))
-                        .padding(horizontal = 12.dp, vertical = 10.dp),
-                ) {
-                    PropertySheetContent(
-                        state = state,
-                        unitSystem = state.unitSystem,
-                        onDelete = viewModel::deleteSelected,
-                        onInterior = { viewModel.setWallThickness(interior = true) },
-                        onExterior = { viewModel.setWallThickness(interior = false) },
-                        onRename = viewModel::renameSelection,
-                        onWallLength = viewModel::setWallLength,
-                        onWallHeight = viewModel::setWallHeight,
-                        onWallSideColor = viewModel::setWallSideColor,
-                        onWallSidePreset = viewModel::setWallSidePreset,
-                        onClearWallSideTexture = viewModel::clearWallSideTexture,
-                        onWallPattern = viewModel::setWallPattern,
-                        onWallGlass = viewModel::setWallGlass,
-                        onStraightenWall = viewModel::straightenWall,
-                        onAddCurvePoint = viewModel::addCurvePoint,
-                        onWallBaseboardEnabled = viewModel::setWallBaseboardEnabled,
-                        onWallBaseboardHeight = viewModel::setWallBaseboardHeight,
-                        onWallBaseboardThickness = viewModel::setWallBaseboardThickness,
-                        onFormatPainter = viewModel::startFormatPainter,
-                        onImportWallTexture = { side ->
-                            pendingTextureImport = side
-                            pickUserTexture.launch("image/*")
-                        },
-                        onAddWallDimension = viewModel::addDimensionForSelectedWall,
-                        onFloorColor = viewModel::setFloorColor,
-                        onFloorPreset = viewModel::setFloorPreset,
-                        onClearFloorTexture = viewModel::clearFloorTexture,
-                        onImportFloorTexture = {
-                            pendingTextureImport = "floor"
-                            pickUserTexture.launch("image/*")
-                        },
-                        onCeilingColor = viewModel::setCeilingColor,
-                        onCeilingPreset = viewModel::setCeilingPreset,
-                        onClearCeilingTexture = viewModel::clearCeilingTexture,
-                        onRoomBorder = viewModel::setRoomBorder,
-                        onCeilingVisible = viewModel::setCeilingVisible,
-                        onCeilingStyle = viewModel::setCeilingStyle,
-                        onRoomSize = viewModel::setRoomSize,
-                        onStageRoom = viewModel::stageSelectedRoom,
-                        onOpeningWidth = viewModel::setOpeningWidth,
-                        onFlipHinge = viewModel::flipOpeningHinge,
-                        onFlipSwing = viewModel::flipOpeningSwing,
-                        onToggleOpeningOpen = viewModel::toggleOpeningOpen,
-                        onFurnitureWidth = viewModel::setFurnitureWidth,
-                        onFurnitureDepth = viewModel::setFurnitureDepth,
-                        onFurnitureAngleDeg = viewModel::setFurnitureAngleDeg,
-                        onCopyFurniture = viewModel::copySelection,
-                        onPasteFurniture = viewModel::pasteClipboard,
-                        onDuplicateFurniture = viewModel::duplicateSelection,
-                        onReplaceFurniture = {
-                            catalogReplaceMode = true
-                            showCatalog = true
-                        },
-                        onAlign = viewModel::alignSelection,
-                        onDistribute = viewModel::distributeSelection,
-                        onGroupFurniture = viewModel::groupSelection,
-                        onUngroupFurniture = viewModel::ungroupSelection,
-                        onMirrorFurniture = viewModel::mirrorSelection,
-                        onDimensionLength = viewModel::setDimensionLength,
-                        compact = true,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .verticalScroll(rememberScrollState()),
-                    )
-                }
+                // Phone props rendered as ModalBottomSheet below (outside plan overlay).
             }
         }
 
@@ -1090,6 +1038,120 @@ fun EditorScreen(
                 .align(Alignment.BottomCenter)
                 .padding(bottom = 110.dp),
         )
+    }
+
+    // Phone: iOS-style peeks — wall ~96dp, others ~0.4 screen with drag handle.
+    val config = LocalConfiguration.current
+    val phoneSidePanel = config.screenWidthDp.dp >= SidePanelMinWidth
+    val phonePlanChrome = state.viewMode == EditorViewMode.Plan2D ||
+        state.viewMode == EditorViewMode.Split
+    val phoneWall = when (val sel = state.selection) {
+        is Selection.Wall -> state.home.walls.find { it.id == sel.id }
+        is Selection.Endpoint -> state.home.walls.find { it.id == sel.wallID }
+        else -> null
+    }
+    if (!phoneSidePanel &&
+        hasSelection &&
+        state.tool is EditorTool.Select &&
+        phonePlanChrome
+    ) {
+        ModalBottomSheet(
+            onDismissRequest = {
+                wallSheetExpanded = false
+                viewModel.clearSelection()
+            },
+            sheetState = propsSheetState,
+            containerColor = HdTheme.colors.ivory,
+            dragHandle = { BottomSheetDefaults.DragHandle() },
+            scrimColor = Color.Transparent,
+        ) {
+            if (phoneWall != null && !wallSheetExpanded) {
+                WallPeekBar(
+                    wall = phoneWall,
+                    unitSystem = state.unitSystem,
+                    onEdit = {
+                        wallSheetExpanded = true
+                        propsSheetScope.launch { propsSheetState.expand() }
+                    },
+                    onDelete = viewModel::deleteSelected,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(96.dp)
+                        .padding(horizontal = 16.dp)
+                        .navigationBarsPadding(),
+                )
+            } else {
+                val screenH = config.screenHeightDp.dp
+                PropertySheetContent(
+                    state = state,
+                    unitSystem = state.unitSystem,
+                    onDelete = viewModel::deleteSelected,
+                    onInterior = { viewModel.setWallThickness(interior = true) },
+                    onExterior = { viewModel.setWallThickness(interior = false) },
+                    onRename = viewModel::renameSelection,
+                    onWallLength = viewModel::setWallLength,
+                    onWallHeight = viewModel::setWallHeight,
+                    onWallSideColor = viewModel::setWallSideColor,
+                    onWallSidePreset = viewModel::setWallSidePreset,
+                    onClearWallSideTexture = viewModel::clearWallSideTexture,
+                    onWallPattern = viewModel::setWallPattern,
+                    onWallGlass = viewModel::setWallGlass,
+                    onStraightenWall = viewModel::straightenWall,
+                    onAddCurvePoint = viewModel::addCurvePoint,
+                    onWallBaseboardEnabled = viewModel::setWallBaseboardEnabled,
+                    onWallBaseboardHeight = viewModel::setWallBaseboardHeight,
+                    onWallBaseboardThickness = viewModel::setWallBaseboardThickness,
+                    onFormatPainter = viewModel::startFormatPainter,
+                    onImportWallTexture = { side ->
+                        pendingTextureImport = side
+                        pickUserTexture.launch("image/*")
+                    },
+                    onAddWallDimension = viewModel::addDimensionForSelectedWall,
+                    onFloorColor = viewModel::setFloorColor,
+                    onFloorPreset = viewModel::setFloorPreset,
+                    onClearFloorTexture = viewModel::clearFloorTexture,
+                    onImportFloorTexture = {
+                        pendingTextureImport = "floor"
+                        pickUserTexture.launch("image/*")
+                    },
+                    onCeilingColor = viewModel::setCeilingColor,
+                    onCeilingPreset = viewModel::setCeilingPreset,
+                    onClearCeilingTexture = viewModel::clearCeilingTexture,
+                    onRoomBorder = viewModel::setRoomBorder,
+                    onCeilingVisible = viewModel::setCeilingVisible,
+                    onCeilingStyle = viewModel::setCeilingStyle,
+                    onRoomSize = viewModel::setRoomSize,
+                    onStageRoom = viewModel::stageSelectedRoom,
+                    onOpeningWidth = viewModel::setOpeningWidth,
+                    onFlipHinge = viewModel::flipOpeningHinge,
+                    onFlipSwing = viewModel::flipOpeningSwing,
+                    onToggleOpeningOpen = viewModel::toggleOpeningOpen,
+                    onFurnitureWidth = viewModel::setFurnitureWidth,
+                    onFurnitureDepth = viewModel::setFurnitureDepth,
+                    onFurnitureAngleDeg = viewModel::setFurnitureAngleDeg,
+                    onCopyFurniture = viewModel::copySelection,
+                    onPasteFurniture = viewModel::pasteClipboard,
+                    onDuplicateFurniture = viewModel::duplicateSelection,
+                    onReplaceFurniture = {
+                        catalogReplaceMode = true
+                        showCatalog = true
+                    },
+                    onAlign = viewModel::alignSelection,
+                    onDistribute = viewModel::distributeSelection,
+                    onGroupFurniture = viewModel::groupSelection,
+                    onUngroupFurniture = viewModel::ungroupSelection,
+                    onMirrorFurniture = viewModel::mirrorSelection,
+                    onDimensionLength = viewModel::setDimensionLength,
+                    compact = true,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = screenH * 0.45f)
+                        .verticalScroll(rememberScrollState())
+                        .padding(horizontal = 16.dp)
+                        .navigationBarsPadding(),
+                )
+            }
+        }
     }
 
     if (showAdd) {
@@ -1283,10 +1345,11 @@ private fun EditorTipBanner(
             modifier = Modifier.weight(1f),
         )
         IconButton(onClick = onDismiss, modifier = Modifier.size(32.dp)) {
-            Icon(
-                Icons.Outlined.Close,
+            SfIcon(
+                HdSfIcons.xmarkCircleFill,
                 contentDescription = "Dismiss tip",
                 tint = HdTheme.colors.architectInk,
+                size = 18.dp,
             )
         }
     }
@@ -1341,10 +1404,11 @@ private fun FloorSelectorButton(
                     },
                     leadingIcon = if (level.id == active.id) {
                         {
-                            Icon(
-                                Icons.Outlined.Layers,
+                            SfIcon(
+                                HdSfIcons.rectangleSplit1x2,
                                 contentDescription = null,
                                 tint = HdTheme.colors.selection,
+                                size = 18.dp,
                             )
                         }
                     } else {
@@ -1360,7 +1424,12 @@ private fun FloorSelectorButton(
                     onAddFloor()
                 },
                 leadingIcon = {
-                    Icon(Icons.Outlined.Add, contentDescription = null)
+                    SfIcon(
+                        HdSfIcons.plus,
+                        contentDescription = null,
+                        tint = HdTheme.colors.architectInk,
+                        size = 18.dp,
+                    )
                 },
             )
             if (ordered.size > 1) {
@@ -1565,11 +1634,11 @@ private fun TraceUnderlayCapsule(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Icon(
-            Icons.Outlined.Image,
+        SfIcon(
+            HdSfIcons.cameraAperture,
             contentDescription = null,
             tint = HdTheme.colors.architectInk,
-            modifier = Modifier.size(16.dp),
+            size = 16.dp,
         )
         Slider(
             value = (widthCM / 100.0).toFloat(),
@@ -1584,10 +1653,11 @@ private fun TraceUnderlayCapsule(
             color = HdTheme.colors.architectInk,
         )
         IconButton(onClick = onRemove, modifier = Modifier.size(32.dp)) {
-            Icon(
-                Icons.Outlined.Close,
+            SfIcon(
+                HdSfIcons.xmarkCircleFill,
                 contentDescription = "Remove trace image",
                 tint = HdTheme.colors.architectInk,
+                size = 18.dp,
             )
         }
     }
@@ -1600,12 +1670,12 @@ private fun EditorModeIconSwitch(
     onSelect: (EditorViewMode) -> Unit,
     showSplit: Boolean = false,
 ) {
-    data class ModeIcon(val mode: EditorViewMode, val icon: androidx.compose.ui.graphics.vector.ImageVector, val label: String)
+    data class ModeIcon(val mode: EditorViewMode, @DrawableRes val icon: Int, val label: String)
     val modes = buildList {
-        add(ModeIcon(EditorViewMode.Plan2D, Icons.Outlined.GridView, "2D"))
-        if (showSplit) add(ModeIcon(EditorViewMode.Split, Icons.Outlined.ViewQuilt, "Split"))
-        add(ModeIcon(EditorViewMode.View3D, Icons.Outlined.ViewInAr, "3D"))
-        add(ModeIcon(EditorViewMode.AR, Icons.Outlined.ViewInAr, "AR"))
+        add(ModeIcon(EditorViewMode.Plan2D, HdSfIcons.rectangle, "2D"))
+        if (showSplit) add(ModeIcon(EditorViewMode.Split, HdSfIcons.rectangleSplit1x2, "Split"))
+        add(ModeIcon(EditorViewMode.View3D, HdSfIcons.cube, "3D"))
+        add(ModeIcon(EditorViewMode.AR, HdSfIcons.arkit, "AR"))
     }
     Row(
         horizontalArrangement = Arrangement.spacedBy(2.dp),
@@ -1631,11 +1701,11 @@ private fun EditorModeIconSwitch(
                     )
                     .clickable { onSelect(item.mode) },
             ) {
-                Icon(
-                    imageVector = item.icon,
+                SfIcon(
+                    item.icon,
                     contentDescription = item.label,
                     tint = if (active) HdTheme.colors.architectInk else HdTheme.colors.architectGray,
-                    modifier = Modifier.size(14.dp),
+                    size = 14.dp,
                 )
             }
         }
@@ -1762,6 +1832,11 @@ private fun EditorContextChipsRow(
             label = if (orthoLock) "Ortho 45°" else "Ortho free",
             active = orthoLock,
             onClick = onToggleOrtho,
+            icon = if (orthoLock) {
+                HdSfIcons.linesMeasurementHorizontal
+            } else {
+                HdSfIcons.lineDiagonal
+            },
         )
     }
 }
@@ -1771,19 +1846,33 @@ private fun ContextChip(
     label: String,
     active: Boolean,
     onClick: () -> Unit,
+    @DrawableRes icon: Int? = null,
 ) {
-    Text(
-        text = label,
-        color = if (active) HdTheme.colors.paper else HdTheme.colors.architectInk,
-        fontFamily = HdSans,
-        fontWeight = FontWeight.SemiBold,
-        fontSize = 11.sp,
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
         modifier = Modifier
             .clip(RoundedCornerShape(999.dp))
             .background(if (active) HdTheme.colors.selection else Color.Transparent)
             .clickable(onClick = onClick)
             .padding(horizontal = 10.dp, vertical = 5.dp),
-    )
+    ) {
+        if (icon != null) {
+            SfIcon(
+                icon,
+                contentDescription = null,
+                tint = if (active) HdTheme.colors.paper else HdTheme.colors.architectInk,
+                size = 12.dp,
+            )
+        }
+        Text(
+            text = label,
+            color = if (active) HdTheme.colors.paper else HdTheme.colors.architectInk,
+            fontFamily = HdSans,
+            fontWeight = FontWeight.SemiBold,
+            fontSize = 11.sp,
+        )
+    }
 }
 
 @Composable
@@ -1821,30 +1910,44 @@ private fun AddSheetContent(
         )
         // iOS AddToolSheet sections: OPENINGS / FURNITURE / STRUCTURE / ANNOTATE (+ walls)
         AddSectionHeader("WALLS")
-        AddListRow("Interior wall · $intLabel", onDrawWallInterior)
-        AddListRow("Exterior wall · $extLabel", onDrawWallExterior)
-        AddListRow("Room", onDrawRoom)
+        AddListRow("Interior wall · $intLabel", HdSfIcons.plusSquare, onDrawWallInterior)
+        AddListRow("Exterior wall · $extLabel", HdSfIcons.plusSquare, onDrawWallExterior)
+        AddListRow("Room", HdSfIcons.rectangleSplit3x3, onDrawRoom)
         AddSectionHeader("OPENINGS")
-        AddListRow("Door", onDoor)
-        AddListRow("Window", onWindow)
-        AddListRow("French door", onFrench)
+        AddListRow("Door", HdSfIcons.doorLeftHandOpen, onDoor)
+        AddListRow("Window", HdSfIcons.windowVerticalClosed, onWindow)
+        AddListRow("French door", HdSfIcons.doorLeftHandOpen, onFrench)
         AddSectionHeader("FURNITURE")
-        AddListRow("Furniture…", onFurniture)
-        AddListRow("Custom furniture", onDrawFurnitureBox)
+        AddListRow("Furniture…", HdSfIcons.sofa, onFurniture)
+        AddListRow("Custom furniture", HdSfIcons.rectangleDashed, onDrawFurnitureBox)
         AddSectionHeader("STRUCTURE")
-        AddListRow("Round pillar") { onPlaceStructure(StructureCatalog.pillarRoundID) }
-        AddListRow("Square pillar") { onPlaceStructure(StructureCatalog.pillarSquareID) }
-        AddListRow("Ceiling beam") { onPlaceStructure(StructureCatalog.beamID) }
-        AddListRow("Wall mirror") { onPlaceStructure(StructureCatalog.mirrorID) }
-        AddListRow("Garden path") { onPlaceStructure(StructureCatalog.pathID) }
-        AddListRow("Railing") { onPlaceStructure(StructureCatalog.railingID) }
-        AddListRow("Rug") { onPlaceStructure(StructureCatalog.rugID) }
+        AddListRow("Round pillar", HdSfIcons.cylinder) {
+            onPlaceStructure(StructureCatalog.pillarRoundID)
+        }
+        AddListRow("Square pillar", HdSfIcons.squareSplitBottomrightquarter) {
+            onPlaceStructure(StructureCatalog.pillarSquareID)
+        }
+        AddListRow("Ceiling beam", HdSfIcons.rectangleCompressVertical) {
+            onPlaceStructure(StructureCatalog.beamID)
+        }
+        AddListRow("Wall mirror", HdSfIcons.rectanglePortraitOnPortrait) {
+            onPlaceStructure(StructureCatalog.mirrorID)
+        }
+        AddListRow("Garden path", HdSfIcons.roadLanes) {
+            onPlaceStructure(StructureCatalog.pathID)
+        }
+        AddListRow("Railing", HdSfIcons.figureStairs) {
+            onPlaceStructure(StructureCatalog.railingID)
+        }
+        AddListRow("Rug", HdSfIcons.rectanglePortrait) {
+            onPlaceStructure(StructureCatalog.rugID)
+        }
         AddSectionHeader("ANNOTATE")
-        AddListRow("Dimension", onDimension)
-        AddListRow("Exterior dims", onExteriorDims)
-        AddListRow("Text label", onPlaceLabel)
-        AddListRow("Walk here", onWalkHere)
-        AddListRow("Trace photo…", onTrace)
+        AddListRow("Dimension", HdSfIcons.ruler, onDimension)
+        AddListRow("Exterior dims", HdSfIcons.rulerFill, onExteriorDims)
+        AddListRow("Text label", HdSfIcons.textformat, onPlaceLabel)
+        AddListRow("Walk here", HdSfIcons.figureWalk, onWalkHere)
+        AddListRow("Trace photo…", HdSfIcons.cameraAperture, onTrace)
         Spacer(Modifier.height(24.dp))
     }
 }
@@ -1863,7 +1966,11 @@ private fun AddSectionHeader(title: String) {
 }
 
 @Composable
-private fun AddListRow(title: String, onClick: () -> Unit) {
+private fun AddListRow(
+    title: String,
+    @DrawableRes icon: Int,
+    onClick: () -> Unit,
+) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
@@ -1880,11 +1987,11 @@ private fun AddListRow(title: String, onClick: () -> Unit) {
                 .background(HdTheme.colors.selection.copy(alpha = 0.14f)),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(
-                Icons.Outlined.Add,
+            SfIcon(
+                icon,
                 contentDescription = null,
                 tint = HdTheme.colors.selection,
-                modifier = Modifier.size(16.dp),
+                size = 16.dp,
             )
         }
         Text(
@@ -1895,11 +2002,11 @@ private fun AddListRow(title: String, onClick: () -> Unit) {
                 .weight(1f)
                 .padding(horizontal = 12.dp),
         )
-        Text(
-            text = "›",
-            color = HdTheme.colors.architectGray,
-            fontSize = 18.sp,
-            fontWeight = FontWeight.Light,
+        SfIcon(
+            HdSfIcons.chevronRight,
+            contentDescription = null,
+            tint = HdTheme.colors.architectGray,
+            size = 12.dp,
         )
     }
 }
@@ -1945,11 +2052,11 @@ private fun DockItem(
             ) {
                 content()
                 if (chevron) {
-                    Icon(
-                        Icons.Outlined.KeyboardArrowDown,
+                    SfIcon(
+                        HdSfIcons.chevronDown,
                         contentDescription = null,
                         tint = if (ink || active) HdTheme.colors.paper else HdTheme.colors.architectInk,
-                        modifier = Modifier.size(10.dp),
+                        size = 8.dp,
                     )
                 }
             }
@@ -1983,5 +2090,179 @@ private fun DockItem(
                 .fillMaxWidth()
                 .height(12.dp),
         )
+    }
+}
+
+/** iOS DeleteToastPill — ink capsule above dock with Undo; auto-dismiss 5s. */
+@Composable
+private fun DeleteToastPill(
+    message: String,
+    toastId: Long,
+    onUndo: () -> Unit,
+    onExpire: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    LaunchedEffect(toastId) {
+        delay(5_000)
+        onExpire()
+    }
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        modifier = modifier
+            .shadow(8.dp, RoundedCornerShape(999.dp), ambientColor = Color.Black.copy(alpha = 0.2f))
+            .clip(RoundedCornerShape(999.dp))
+            .background(HdTheme.colors.architectInk.copy(alpha = 0.92f))
+            .padding(start = 16.dp, end = 6.dp, top = 6.dp, bottom = 6.dp),
+    ) {
+        Text(
+            text = message,
+            color = HdTheme.colors.paper,
+            fontFamily = HdSans,
+            fontWeight = FontWeight.Medium,
+            fontSize = 14.sp,
+        )
+        Text(
+            text = "Undo",
+            color = HdTheme.colors.paper,
+            fontFamily = HdSans,
+            fontWeight = FontWeight.Bold,
+            fontSize = 14.sp,
+            modifier = Modifier
+                .clip(RoundedCornerShape(999.dp))
+                .background(Color.White.copy(alpha = 0.18f))
+                .clickable(onClick = onUndo)
+                .padding(horizontal = 10.dp, vertical = 5.dp),
+        )
+    }
+}
+
+/** iOS PlanCanvasView right-edge ivory tool circles. */
+@Composable
+private fun PlanToolRail(
+    selection: Selection,
+    orthoLock: Boolean,
+    drawWallActive: Boolean,
+    onFlipHinge: () -> Unit,
+    onFlipSwing: () -> Unit,
+    onWallStyle: () -> Unit,
+    onFit: () -> Unit,
+    onToggleOrtho: () -> Unit,
+    onToggleDrawWall: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val openingSelected = selection is Selection.Opening || selection is Selection.OpeningHandle
+    val wallSelected = selection is Selection.Wall || selection is Selection.Endpoint
+    Column(
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = modifier,
+    ) {
+        if (openingSelected) {
+            RailCircleButton(
+                icon = HdSfIcons.arrowLeftAndRight,
+                contentDescription = "Flip hinge",
+                onClick = onFlipHinge,
+            )
+            RailCircleButton(
+                icon = HdSfIcons.arrowUpAndDown,
+                contentDescription = "Flip swing",
+                onClick = onFlipSwing,
+            )
+        }
+        if (wallSelected) {
+            RailCircleButton(
+                icon = HdSfIcons.paintbrushFill,
+                contentDescription = "Wall style / format painter",
+                onClick = onWallStyle,
+            )
+        }
+        RailCircleButton(
+            icon = HdSfIcons.viewfinder,
+            contentDescription = "Fit plan",
+            onClick = onFit,
+        )
+        RailCircleButton(
+            icon = if (orthoLock) {
+                HdSfIcons.linesMeasurementHorizontal
+            } else {
+                HdSfIcons.lineDiagonal
+            },
+            contentDescription = if (orthoLock) "Ortho on" else "Ortho off",
+            active = orthoLock,
+            onClick = onToggleOrtho,
+        )
+        RailCircleButton(
+            icon = if (drawWallActive) HdSfIcons.plusSquareFill else HdSfIcons.plusSquare,
+            contentDescription = "Draw wall",
+            active = drawWallActive,
+            onClick = onToggleDrawWall,
+        )
+    }
+}
+
+@Composable
+private fun RailCircleButton(
+    @DrawableRes icon: Int,
+    contentDescription: String,
+    onClick: () -> Unit,
+    active: Boolean = false,
+) {
+    Box(
+        contentAlignment = Alignment.Center,
+        modifier = Modifier
+            .size(40.dp)
+            .shadow(2.dp, CircleShape, ambientColor = Color.Black.copy(alpha = 0.12f))
+            .clip(CircleShape)
+            .background(HdTheme.colors.ivory.copy(alpha = 0.94f))
+            .border(0.5.dp, HdTheme.colors.hairline, CircleShape)
+            .clickable(onClick = onClick),
+    ) {
+        SfIcon(
+            icon,
+            contentDescription = contentDescription,
+            tint = if (active) HdTheme.colors.selection else HdTheme.colors.architectInk,
+            size = 17.dp,
+        )
+    }
+}
+
+/** iOS WallStyleSheet peek — length + Edit / Delete. */
+@Composable
+private fun WallPeekBar(
+    wall: com.homedesign.android.domain.model.Wall,
+    unitSystem: UnitSystem,
+    onEdit: () -> Unit,
+    onDelete: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val lengthCm = kotlin.math.hypot(wall.endX - wall.startX, wall.endY - wall.startY)
+    Column(
+        verticalArrangement = Arrangement.SpaceEvenly,
+        modifier = modifier,
+    ) {
+        Text(
+            text = "Wall · ${UnitFormat.length(lengthCm, unitSystem)}",
+            style = HdTheme.typography.titleMedium,
+            color = HdTheme.colors.architectInk,
+        )
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            TextButton(onClick = onEdit) {
+                Text("Edit", color = HdTheme.colors.selection)
+            }
+            TextButton(onClick = onDelete) {
+                SfIcon(
+                    HdSfIcons.trash,
+                    contentDescription = null,
+                    tint = HdTheme.colors.destructive,
+                    size = 16.dp,
+                )
+                Spacer(Modifier.width(6.dp))
+                Text("Delete", color = HdTheme.colors.destructive)
+            }
+        }
     }
 }

@@ -8,10 +8,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -22,6 +19,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.homedesign.android.core.ui.HdSfIcons
+import com.homedesign.android.core.ui.SfIcon
 import com.homedesign.android.core.ui.theme.HdTheme
 import com.homedesign.android.domain.geom.AlignEdge
 import com.homedesign.android.domain.geom.ArcWallGeometry
@@ -803,7 +802,12 @@ private fun FurniturePropertyBody(
 @Composable
 private fun DeleteRow(onDelete: () -> Unit) {
     TextButton(onClick = onDelete) {
-        Icon(Icons.Outlined.Delete, contentDescription = null, tint = HdTheme.colors.destructive)
+        SfIcon(
+            HdSfIcons.trash,
+            contentDescription = null,
+            tint = HdTheme.colors.destructive,
+            size = 17.dp,
+        )
         Spacer(Modifier.width(8.dp))
         Text("Delete", color = HdTheme.colors.destructive)
     }

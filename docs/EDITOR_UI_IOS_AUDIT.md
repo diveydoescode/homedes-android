@@ -7,12 +7,12 @@
 
 | Surface | iOS | Android today | Gap |
 |---------|-----|---------------|-----|
-| Top strip | Glass island r18–20; back; serif title; units; mode; share/more | Glass r20; back; sans title; units; mode; share; more; **floor chip** | Type (serif/mono); crowding; floor on strip vs 3D overlay |
-| Dock | **7 slots:** Edit⇄Measure, Add▾, Catalog, Sketch+AI, Walk, Undo, Redo | Same + **Ortho** + DrawWall **Int/Ext** | Density — move Ortho/Int/Ext off persistent dock |
-| Glass | ultraThin + shine + rule + shadow | Kyant blur/lens + border; weak shadow/shine | Add soft elevation + inset highlight |
-| Add sheet | Sectioned List OPENINGS/FURNITURE/STRUCTURE/ANNOTATE | Flat card list | Sectioned inset rows + icons |
-| Props | Peek detents (~96 wall / 0.4) | Capped 280dp ivory box | Closer peek / drag feel |
-| Overlays | Plan2DChips, draw options bar, delete toast pill | Missing / tip banners only | Port overlays |
+| Top strip | Glass island r18–20; back; serif title; units; mode; share/more | Glass r20; SF chevron/share/ellipsis; serif title; units; SF mode icons; share; more | Minor type/crowding |
+| Dock | **7 slots:** Edit⇄Measure, Add▾, Catalog, Sketch+AI, Walk, Undo, Redo | Same 7 slots with SF icons (cursorarrow/ruler/plus/chair/viewfinder/walk/uturn) | — |
+| Glass | ultraThin + shine + rule + shadow | Kyant blur/lens + border; soft elevation | Morph glass out of scope |
+| Add sheet | Sectioned List OPENINGS/FURNITURE/STRUCTURE/ANNOTATE | Sectioned rows + SF icons (door/window/sofa/…/chevron.right) | — |
+| Props | Peek detents (~96 wall / 0.4) | Phone ModalBottomSheet + wall 96dp peek (length/Edit/Delete); wide side panel unchanged | Fine-tune detent animation |
+| Overlays | Plan2DChips, draw options bar, delete toast pill, right-edge circles | Plan2D chip + Ortho/Int/Ext; DeleteToastPill; PlanToolRail (hinge/swing/paint/fit/ortho/draw) | — |
 
 ## Implementation order
 
@@ -21,7 +21,9 @@
 3. Top strip: serif title + mono saved; tighten mode/units; glass shadow. **Done** (floors via overflow)
 4. Plan2DChips + draw thickness capsule. **Done** (Plan2D chip + Ortho/Int/Ext context row)
 5. Add sheet sections matching iOS. **Done** (WALLS/OPENINGS/FURNITURE/STRUCTURE/ANNOTATE)
-6. Delete toast pill above dock. **Still open**
-7. MCP screenshot compare. **Done** (`artifacts/ui-port-editor-v3.png`, Add sheet verified)
+6. Delete toast pill above dock. **Done** (`DeleteToast` + `DeleteToastPill`, Undo → VM.undo, 5s auto-dismiss)
+7. SF Symbol icons 1:1. **Done** (`HdSfIcons` + `SfIcon`; editor chrome/dock/modes/add/rail)
+8. Right-edge tool rail. **Done** (`PlanToolRail` ivory circles)
+9. MCP screenshot compare. **Done** (`artifacts/ui-port-editor-v3.png`, Add sheet verified)
 
 *Out of scope this pass:* iOS 26 morph glass animations; catalog mesh art; designer pixel zip beyond this audit.

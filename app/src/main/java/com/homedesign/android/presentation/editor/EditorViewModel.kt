@@ -86,6 +86,7 @@ import com.homedesign.android.domain.editor.previewWallMove
 import com.homedesign.android.domain.editor.toggleFurnitureInSelection
 import com.homedesign.android.domain.editor.wallsOnLevel
 import com.homedesign.android.domain.export.PlanThumbnail
+import com.homedesign.android.domain.export.computePlanBounds
 import com.homedesign.android.domain.export.exportDXF
 import com.homedesign.android.domain.export.exportPDF
 import com.homedesign.android.domain.geom.AlignEdge
@@ -319,6 +320,7 @@ class EditorViewModel @Inject constructor(
     fun undo() {
         if (!document.undoOnce()) return
         markDirty(coalesce = false)
+        _state.update { it.copy(deleteToast = null) }
         publish()
     }
 
@@ -334,7 +336,30 @@ class EditorViewModel @Inject constructor(
         document.replaceHome(result.home)
         document.setSelection(result.selection)
         markDirty(coalesce = false)
-        publish(toast = result.toast)
+        val msg = result.toast
+        if (msg != null) {
+            _state.update {
+                it.copy(deleteToast = DeleteToast(message = msg))
+            }
+        }
+        publish()
+    }
+
+    /** iOS PlanCanvasView fit — zoom/pan to full plan bounds. */
+    fun fitPlanToView() {
+        val bounds = computePlanBounds(document.home, document.home.selectedLevelID) ?: return
+        val pad = 40.0
+        _state.update {
+            it.copy(
+                cameraFocus = CameraFocusRequest(
+                    token = System.currentTimeMillis(),
+                    minX = bounds.minX - pad,
+                    minY = bounds.minY - pad,
+                    maxX = bounds.maxX + pad,
+                    maxY = bounds.maxY + pad,
+                ),
+            )
+        }
     }
 
     fun copySelection() {
@@ -1642,6 +1667,10 @@ class EditorViewModel @Inject constructor(
 
     fun consumeToast() {
         _state.update { it.copy(toast = null) }
+    }
+
+    fun consumeDeleteToast() {
+        _state.update { it.copy(deleteToast = null) }
     }
 
     override fun onCleared() {

@@ -59,6 +59,12 @@ data class CameraFocusRequest(
     val maxY: Double,
 )
 
+/** iOS `DeleteToast` — transient undo pill after delete. */
+data class DeleteToast(
+    val id: Long = System.currentTimeMillis(),
+    val message: String,
+)
+
 /** Editor chrome view mode. View3D/Walk reuse Filament; AR uses ARCore+GLES (or CameraX sim). */
 enum class EditorViewMode {
     Plan2D,
@@ -145,6 +151,8 @@ data class EditorUiState(
     val loading: Boolean = true,
     val error: String? = null,
     val toast: String? = null,
+    /** iOS DeleteToastPill — shown above the dock; Undo pops last snapshot. */
+    val deleteToast: DeleteToast? = null,
     val exportUri: Uri? = null,
     val exportMime: String? = null,
     val exportLabel: String? = null,
