@@ -315,3 +315,6 @@ Everything else in-repo is done or explicitly closed (incl. crown moulding — n
 - [x] **Kyant Backdrop 2.0.1 liquid glass** — `core/ui/LiquidGlass.kt`; editor top strips + dock use `drawBackdrop` (API 33+), Material fallback below  
 - [x] **Toolchain for Backdrop 2** — Gradle 9.3.1, AGP 9.1.0, Kotlin 2.4.10 (built-in), KSP 2.3.11, Compose BOM 2026.08.00, compileSdk 37, Hilt 2.60.1  
 - [x] **iOS New design sheet** — Blank floor plan / From a sketch / From a template (+ template sub-sheet for showcase/sample/imports)  
+- [x] **iOS dashboard chrome** — italic Designs + count, glass search/sort pills, Showcase row, 2-col grid, ink FAB ring  
+- [x] **iOS editor deck** — single glass top strip (units + mode icons + share + overflow + floor); dock Edit/Add/Catalog/Sketch/Walk/Undo/Redo  
+- [x] **Split on all widths** — phone vertical 3D↑/2D↓; wide side-by-side  
