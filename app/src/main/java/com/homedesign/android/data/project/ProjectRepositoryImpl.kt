@@ -1,5 +1,6 @@
 package com.homedesign.android.data.project
 
+import android.content.Context
 import com.homedesign.android.data.local.db.ProjectDao
 import com.homedesign.android.data.local.db.ProjectEntity
 import com.homedesign.android.domain.export.PlanThumbnail
@@ -9,6 +10,7 @@ import com.homedesign.android.domain.model.HomeFactory
 import com.homedesign.android.domain.project.ProjectMeta
 import com.homedesign.android.domain.project.ProjectRepository
 import com.homedesign.android.domain.project.projectMetaFromHome
+import dagger.hilt.android.qualifiers.ApplicationContext
 import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -17,6 +19,7 @@ import kotlinx.coroutines.flow.map
 
 @Singleton
 class ProjectRepositoryImpl @Inject constructor(
+    @ApplicationContext private val appContext: Context,
     private val dao: ProjectDao,
 ) : ProjectRepository {
 
@@ -48,7 +51,7 @@ class ProjectRepositoryImpl @Inject constructor(
         val entity = dao.getById(id) ?: error("Project not found: $id")
         val bytes = entity.archiveBlob
             ?: return HomeFactory.emptyHome(entity.name)
-        return HomedesignZip.decode(bytes)
+        return HomedesignZip.decode(bytes, HomedesignZip.embeddedTextureDirectory(appContext.filesDir))
     }
 
     override suspend fun saveHome(id: String, home: Home, thumbnailJpegBytes: ByteArray?) {
@@ -77,7 +80,10 @@ class ProjectRepositoryImpl @Inject constructor(
         val now = System.currentTimeMillis()
         val bytes = existing.archiveBlob
         if (bytes != null) {
-            val home = HomedesignZip.decode(bytes).copy(name = trimmed)
+            val home = HomedesignZip.decode(
+                bytes,
+                HomedesignZip.embeddedTextureDirectory(appContext.filesDir),
+            ).copy(name = trimmed)
             val archive = HomedesignZip.encode(home)
             dao.upsert(
                 existing.copy(

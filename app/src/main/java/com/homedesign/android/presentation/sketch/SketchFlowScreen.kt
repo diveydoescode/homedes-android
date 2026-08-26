@@ -185,7 +185,10 @@ class SketchFlowViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 val home = try {
-                    HomedesignZip.decode(bytes)
+                    HomedesignZip.decode(
+                        bytes,
+                        HomedesignZip.embeddedTextureDirectory(appContext.filesDir),
+                    )
                 } catch (_: Exception) {
                     decodeHome(bytes)
                 }

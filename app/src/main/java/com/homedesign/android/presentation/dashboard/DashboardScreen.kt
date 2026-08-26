@@ -192,7 +192,10 @@ class DashboardViewModel @Inject constructor(
                     appContext.contentResolver.openInputStream(uri)?.use { it.readBytes() }
                         ?: error("Could not read file")
                 }
-                val home = HomedesignZip.decode(bytes)
+                val home = HomedesignZip.decode(
+                    bytes,
+                    HomedesignZip.embeddedTextureDirectory(appContext.filesDir),
+                )
                 val meta = projectRepository.createFromHome(home)
                 onOpened(meta.id)
             } catch (e: Exception) {
