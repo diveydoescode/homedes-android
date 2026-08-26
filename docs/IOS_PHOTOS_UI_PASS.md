@@ -21,10 +21,11 @@
 
 ## Implementation targets
 
-1. New design typography + paper icon tiles  
-2. Continue hero arrow row  
-3. Floor chip on 3D pane (not top strip)  
-4. Catalog “Add Furniture” + Cancel  
-5. Wall/furniture sheet polish toward photos  
+1. [x] New design typography + paper icon tiles — serif “New ” + italic “design”; ivory rows with paper icon tiles (MCP `photo-pass-02-new.png`)  
+2. [x] Continue hero arrow row — Continue LEFT + `arrow.right` RIGHT via `SpaceBetween`  
+3. [x] Floor chip on 3D pane (not top strip) — blue **G** top-trailing (`photo-pass-05-3d.png`)  
+4. [x] Catalog “Add Furniture” + Cancel (`photo-pass-04-catalog.png`)  
+5. [x] Furniture MEASURE / SELECTION eyebrow + Lighting sheet from sun chip (`photo-pass-06-lighting.png`)  
+6. [ ] Remaining polish: materials chips on furniture props; place-mode tip copy; catalog sort as overflow icon (iOS menu) vs inline chips  
 
 *Updated as items land.*

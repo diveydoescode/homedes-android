@@ -1,8 +1,8 @@
 # HomeDesign Android — Resume State
 
-**Last updated:** 2026-08-26 (session pause — save UI photo pass + SF icons + infinite canvas; continue from §12)  
+**Last updated:** 2026-08-26 (iOS photo UI: hatch walls, Continue card, catalog W×D×H, lighting Style)  
 **Repo:** https://github.com/diveydoescode/homedes-android (`main`)  
-**HEAD tip (at save):** `07e7f54` — `fix(canvas): infinite plan pan like iOS viewport grid`  
+**HEAD tip (at save):** iOS photo-match UI on `main` (this push)  
 **Local path:** `C:\webapp_android\homedes-android`  
 **Companion sources:**
 - Web (Stage 1 oracle): `C:\webapp_android\homedes-webapp` → https://github.com/diveydoescode/homedes-webapp
@@ -303,7 +303,7 @@ Everything else in-repo is done or explicitly closed (incl. crown moulding — n
 
 | Priority | Item | Notes |
 |----------|------|--------|
-| **0** | **Device photo UI pass (IN PROGRESS — do this next)** | User pointed at `C:\webapp_android\ios-photos-ui\`. Spec: `docs/IOS_PHOTOS_UI_PASS.md`. **Not started in code** (agent paused mid-audit). Implement vs photos: (1) New design: serif “New” + italic “design”, paper icon tiles; (2) Continue hero: Continue LEFT + `arrow.right` RIGHT same row; (3) Blue circular floor chip on **3D pane** top-trailing (FloorSelectorButton exists unused); (4) Catalog title “Add Furniture” + Cancel; (5) optional Lighting sheet + MEASURE eyebrow on furniture props. MCP-verify against photos. |
+| **0** | **iOS photo UI leftovers** | Live SoT: `ios-photos-ui/` (not designer V2). **Landed this push:** hatched paper walls, ink furniture symbols, auto exterior dim pills, Continue card, Walk dock, sun lighting + Style presets, catalog Cancel/Add Furniture + `W×D×H` rows. **Still open:** catalog HEIC thumbs (Android lacks the iOS icon pack); crowded opening-split dim pills; AI sketch loading reels; shared-element hero; opening dressings. |
 | 1 | **Catalog-library 3D meshes without SH3D** | **Deferred** — user will supply a mesh pack. Procedural / structure primitives remain until then. |
 | 2 | **Vercel `/api/sketch` deploy** | **Blocked here (no Vercel access).** Docs: `docs/SKETCH_VERCEL_DEPLOY.md` + webapp `DEPLOY.md`. Live origin still 404 until ops deploys. |
 | 3 | **iOS functional parity leftovers** | Mostly 3D/AR: Stage room lighting UI (photo IMG_9197), AR drag+D-pad+1:1, Filament point lights, roof styles, opening dressings. **Phase 1 2D** largely Done — `docs/PHASE1_IOS_ANDROID_2D_GAP.md`. Tiny 2D leftovers: WallSquaring banner, marquee tool, DXF SVG furniture art. |
@@ -337,7 +337,9 @@ Everything else in-repo is done or explicitly closed (incl. crown moulding — n
 - [x] **1:1 SF Symbol icons (editor)** — `HdSfIcons` + `res/drawable/sf_*.xml` (~50+ vectors from SF Symbols); DeleteToastPill; PlanToolRail; phone property peeks (`c3557f0`)  
 - [x] **1:1 SF Symbol icons (dashboard / New design / sketch / journey)** — search, FAB, showcase houses, New design trio icons, sketch camera/photo (`06c4d3f`)  
 - [x] **Infinite plan pan** — grid from visible viewport bounds like iOS `visiblePlanBounds` (`07e7f54`)  
-- [ ] **Device photo UI pass** — **NEXT**; photos at `C:\webapp_android\ios-photos-ui\`; see §12 priority 0 + `docs/IOS_PHOTOS_UI_PASS.md`  
+- [x] **Device photo UI pass (priority surfaces)** — Continue row, New design title, Catalog Add Furniture+Cancel, 3D floor chip, Lighting sheet, MEASURE eyebrow; see `docs/IOS_PHOTOS_UI_PASS.md` leftovers  
+- [x] **iOS photo match (emulator compare)** — paper/hatch walls, ink furniture, dim pills, Walk dock, lighting Style chips (`HomeStylePreset`), catalog `W×D×H` + sectioned list, Newsreader/Inter/JetBrains Mono  
+
 
 ### Key paths for next agent
 

@@ -26,6 +26,7 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.asComposePath
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.graphics.nativeCanvas
@@ -42,6 +43,7 @@ import com.homedesign.android.domain.catalog.catalogById
 import com.homedesign.android.domain.export.PlanBounds
 import com.homedesign.android.domain.export.computePlanBounds
 import com.homedesign.android.domain.geom.ArcWallGeometry
+import com.homedesign.android.domain.geom.DimensionMutation
 import com.homedesign.android.domain.geom.FurnitureGeometry
 import com.homedesign.android.domain.geom.FurnitureSymbolClassifier
 import com.homedesign.android.domain.geom.FurnitureSymbolKind
@@ -87,6 +89,7 @@ import kotlin.math.hypot
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.sin
+import kotlin.math.sqrt
 
 private const val EMPTY_EXTENT_CM = 1000.0
 private const val MIN_ZOOM = 0.25f
@@ -194,7 +197,7 @@ fun PlanCanvas(
     val ink = HdTheme.colors.architectInk
     val selectionColor = HdTheme.colors.selection
     val cautionColor = HdTheme.colors.caution
-    val roomFill = HdTheme.colors.highlight.copy(alpha = 0.55f)
+    val roomFill = HdTheme.colors.selection.copy(alpha = 0.22f)
     val furnitureFill = HdTheme.colors.sand
     val terracotta = HdTheme.colors.terracotta
     val density = LocalDensity.current
@@ -689,22 +692,25 @@ fun PlanCanvas(
                 else -> false
             }
             val glass = WallStyleMutation.isGlass(wall)
-            val fillColor = parseWallFill(wall.leftSideColor) ?: ink
+            val fillColor = parseWallFill(wall.topColor ?: wall.leftSideColor ?: wall.rightSideColor)
+                ?: paper
             drawPath(
                 path,
                 fillColor.copy(
                     alpha = when {
-                        selected -> 0.9f
-                        glass -> 0.35f
-                        else -> 0.88f
+                        selected -> 0.92f
+                        glass -> 0.28f
+                        else -> 1f
                     },
                 ),
             )
-            // Architect selection blue stroke when selected (web #378ADD).
+            if (!glass) {
+                drawWallHatch(path = path, pattern = wall.pattern, stroke = ink, scale = scale)
+            }
             drawPath(
                 path,
-                if (selected) selectionColor else ink.copy(alpha = if (glass) 0.55f else 0.95f),
-                style = Stroke(width = if (selected) max(1.75f, 1.75f / max(scale, 0.001f)) else 1.75f),
+                if (selected) selectionColor else ink.copy(alpha = if (glass) 0.55f else 0.85f),
+                style = Stroke(width = if (selected) 1.6f else 0.75f),
             )
         }
 
@@ -874,9 +880,19 @@ fun PlanCanvas(
             val w = piece.widthInPlan ?: piece.width
             val d = piece.depthInPlan ?: piece.depth
             val symbolPaths = svgCache.artForPiece(piece, entry, w, d)
+            val corners = FurnitureGeometry.cornerPoints(piece)
+            val footprint = Path()
+            val fp0 = planToScreen(corners[0].x, corners[0].y, scale)
+            footprint.moveTo(fp0.x, fp0.y)
+            for (i in 1 until corners.size) {
+                val p = planToScreen(corners[i].x, corners[i].y, scale)
+                footprint.lineTo(p.x, p.y)
+            }
+            footprint.close()
+            // iOS photos: faint occupancy + ink line-art (not terracotta).
+            drawPath(footprint, ink.copy(alpha = 0.08f))
             if (symbolPaths != null) {
                 val center = planToScreen(piece.x, piece.y, scale)
-                val strokeColor = terracotta.copy(alpha = 0.95f)
                 withTransform({
                     translate(center.x, center.y)
                     rotate(Math.toDegrees(piece.angle).toFloat(), pivot = Offset.Zero)
@@ -885,52 +901,22 @@ fun PlanCanvas(
                     for (ap in symbolPaths) {
                         drawPath(
                             path = ap.asComposePath(),
-                            color = strokeColor,
+                            color = ink.copy(alpha = 0.88f),
                             style = Stroke(
-                                width = 1.75f / scale,
+                                width = 1.05f / scale,
                                 cap = StrokeCap.Round,
                             ),
                         )
                     }
                 }
-                if (selected) {
-                    val corners = FurnitureGeometry.cornerPoints(piece)
-                    val path = Path()
-                    val p0 = planToScreen(corners[0].x, corners[0].y, scale)
-                    path.moveTo(p0.x, p0.y)
-                    for (i in 1 until corners.size) {
-                        val p = planToScreen(corners[i].x, corners[i].y, scale)
-                        path.lineTo(p.x, p.y)
-                    }
-                    path.close()
-                    drawPath(path, selectionColor.copy(alpha = 0.28f))
-                    drawPath(
-                        path,
-                        selectionColor,
-                        style = Stroke(width = max(1.75f, 1.75f / max(scale, 0.001f))),
-                    )
-                }
             } else {
-                val corners = FurnitureGeometry.cornerPoints(piece)
-                val path = Path()
-                val p0 = planToScreen(corners[0].x, corners[0].y, scale)
-                path.moveTo(p0.x, p0.y)
-                for (i in 1 until corners.size) {
-                    val p = planToScreen(corners[i].x, corners[i].y, scale)
-                    path.lineTo(p.x, p.y)
-                }
-                path.close()
-                // Architect selection blue fill+stroke (web FurnitureBox #378ADD).
-                // Kind tint from FurnitureSymbolClassifier when SVG symbol art is absent.
                 val kind = FurnitureSymbolClassifier.classify(piece, entry)
-                val kindFill = symbolKindFill(kind, furnitureFill, terracotta)
-                val fill = if (selected) selectionColor.copy(alpha = 0.35f) else kindFill
-                val strokeColor = if (selected) selectionColor else terracotta.copy(alpha = 0.95f)
                 val roundPillar = kind == FurnitureSymbolKind.Pillar &&
                     (
                         piece.catalogID?.contains("round", ignoreCase = true) == true ||
                             (piece.name ?: entry?.name).orEmpty().contains("round", ignoreCase = true)
                     )
+                val boxStroke = Stroke(width = max(1.1f, 1.1f / max(scale, 0.001f)))
                 if (roundPillar) {
                     val center = planToScreen(piece.x, piece.y, scale)
                     withTransform({
@@ -940,26 +926,14 @@ fun PlanCanvas(
                         val rx = ((piece.widthInPlan ?: piece.width) / 2.0 * scale).toFloat()
                         val ry = ((piece.depthInPlan ?: piece.depth) / 2.0 * scale).toFloat()
                         drawOval(
-                            color = fill,
+                            color = ink.copy(alpha = 0.75f),
                             topLeft = Offset(-rx, -ry),
                             size = Size(rx * 2f, ry * 2f),
-                        )
-                        drawOval(
-                            color = strokeColor,
-                            topLeft = Offset(-rx, -ry),
-                            size = Size(rx * 2f, ry * 2f),
-                            style = Stroke(
-                                width = if (selected) max(1.75f, 1.75f / max(scale, 0.001f)) else 2f,
-                            ),
+                            style = boxStroke,
                         )
                     }
                 } else {
-                    drawPath(path, fill)
-                    drawPath(
-                        path,
-                        strokeColor,
-                        style = Stroke(width = if (selected) max(1.75f, 1.75f / max(scale, 0.001f)) else 2f),
-                    )
+                    drawPath(footprint, ink.copy(alpha = 0.75f), style = boxStroke)
                 }
                 val label = entry?.name ?: piece.name.orEmpty()
                 if (label.isNotBlank()) {
@@ -972,6 +946,14 @@ fun PlanCanvas(
                         chip = false,
                     )
                 }
+            }
+            if (selected) {
+                drawPath(footprint, selectionColor.copy(alpha = 0.22f))
+                drawPath(
+                    footprint,
+                    selectionColor,
+                    style = Stroke(width = max(1.75f, 1.75f / max(scale, 0.001f))),
+                )
             }
         }
 
@@ -1000,7 +982,7 @@ fun PlanCanvas(
         for (room in rooms) {
             if (room.points.size < 3) continue
             val areaM2 = RoomGeometry.polygonArea(room) / 10_000.0
-            val name = room.name.orEmpty()
+            val name = if (dims.isEmpty()) "" else room.name.orEmpty()
             val showArea = areaM2 >= roomLabelMinM2
             if (name.isBlank() && !showArea) continue
             val c = RoomGeometry.centroid(room)
@@ -1018,10 +1000,15 @@ fun PlanCanvas(
             )
         }
 
-        for (rawDim in dims) {
+        val dimSource = if (dims.isNotEmpty()) {
+            dims
+        } else {
+            DimensionMutation.exteriorChain(walls, home.selectedLevelID, openings)
+        }
+        for (rawDim in dimSource) {
             val dim = applyDimensionPreview(rawDim, preview)
             val len = hypot(dim.xEnd - dim.xStart, dim.yEnd - dim.yStart)
-            if (len < 1e-6) continue
+            if (len < 80.0) continue
             val nrmX = ((dim.yEnd - dim.yStart) / len) * dim.offset
             val nrmY = (-(dim.xEnd - dim.xStart) / len) * dim.offset
             val ox1 = dim.xStart + nrmX
@@ -1556,6 +1543,58 @@ private fun DrawScope.drawOpeningChevron(
             cap = StrokeCap.Round,
         ),
     )
+}
+
+/**
+ * iOS `drawWallHatch`: diagonal lines clipped to the wall polygon.
+ * Spacing is 8 plan-cm (DXF ANSI31); stroke is ~0.7 screen px so it
+ * reads as hatch, not a solid fill. Null/`hatchUp` is the SH3D default.
+ */
+private fun DrawScope.drawWallHatch(
+    path: Path,
+    pattern: String?,
+    stroke: Color,
+    scale: Float,
+) {
+    val angles = wallHatchAngles(pattern)
+    if (angles.isEmpty()) return
+    val box = path.getBounds()
+    if (box.width <= 1f || box.height <= 1f) return
+    val spacing = (8f * scale).coerceAtLeast(3f)
+    val diag = sqrt(box.width * box.width + box.height * box.height)
+    val half = diag / 2f
+    val centerX = box.left + box.width / 2f
+    val centerY = box.top + box.height / 2f
+    val lineWidth = 0.7f
+    val color = stroke.copy(alpha = 0.55f)
+    clipPath(path) {
+        for (angle in angles) {
+            val dx = cos(angle).toFloat()
+            val dy = sin(angle).toFloat()
+            val nx = -dy
+            val ny = dx
+            var offset = -half
+            while (offset <= half) {
+                val mx = centerX + nx * offset
+                val my = centerY + ny * offset
+                drawLine(
+                    color = color,
+                    start = Offset(mx - dx * half, my - dy * half),
+                    end = Offset(mx + dx * half, my + dy * half),
+                    strokeWidth = lineWidth,
+                )
+                offset += spacing
+            }
+        }
+    }
+}
+
+/** iOS `wallHatchAngles(for:)` — null defaults to hatchUp like PlanCanvasView. */
+private fun wallHatchAngles(pattern: String?): List<Double> = when (pattern) {
+    null, "", "hatchUp", "reversedHatchUp" -> listOf(PI / 4)
+    "hatchDown", "reversedHatchDown" -> listOf(-PI / 4)
+    "crossHatch" -> listOf(PI / 4, -PI / 4)
+    else -> emptyList()
 }
 
 /** Accepts `#RRGGBB` or `AARRGGBB` / trailing 6 hex from Sweet Home style colours. */

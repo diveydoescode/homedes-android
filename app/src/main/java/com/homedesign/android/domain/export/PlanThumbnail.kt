@@ -4,12 +4,17 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.Path
+import android.graphics.RectF
 import com.homedesign.android.domain.geom.ArcWallGeometry
 import com.homedesign.android.domain.geom.WallGeometry
 import com.homedesign.android.domain.model.Home
 import java.io.ByteArrayOutputStream
+import kotlin.math.PI
+import kotlin.math.cos
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.sin
+import kotlin.math.sqrt
 
 /**
  * Best-effort plan preview: paper background, light room fills, black wall footprints.
@@ -19,8 +24,8 @@ object PlanThumbnail {
     const val DEFAULT_SIZE_PX = 512
     const val JPEG_QUALITY = 82
 
-    private const val PAPER = 0xFFF7F4EF.toInt()
-    private const val ROOM_FILL = 0xFFE8E2D9.toInt()
+    private const val PAPER = 0xFFFFFFFF.toInt()
+    private const val ROOM_FILL = 0xFFD4E6F6.toInt()
     private const val INK = 0xFF1A1A1A.toInt()
     private const val PAD_FRAC = 0.08
 
@@ -52,9 +57,19 @@ object PlanThumbnail {
             style = Paint.Style.FILL
             color = ROOM_FILL
         }
-        val wallPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        val wallFillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             style = Paint.Style.FILL
+            color = PAPER
+        }
+        val wallStrokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            style = Paint.Style.STROKE
             color = INK
+            strokeWidth = 1.6f
+        }
+        val hatchPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            style = Paint.Style.STROKE
+            color = 0x8C1A1A1A.toInt()
+            strokeWidth = 0.9f
         }
 
         for (room in home.rooms) {
@@ -85,7 +100,9 @@ object PlanThumbnail {
                 path.lineTo(fx(outline[i].x), fy(outline[i].y))
             }
             path.close()
-            canvas.drawPath(path, wallPaint)
+            canvas.drawPath(path, wallFillPaint)
+            drawThumbHatch(canvas, path, hatchPaint, scale)
+            canvas.drawPath(path, wallStrokePaint)
         }
 
         val out = ByteArrayOutputStream()
@@ -93,5 +110,37 @@ object PlanThumbnail {
         bitmap.recycle()
         if (!ok) return null
         return out.toByteArray()
+    }
+
+    private fun drawThumbHatch(canvas: Canvas, path: Path, paint: Paint, pxPerCm: Float) {
+        val box = RectF()
+        path.computeBounds(box, true)
+        if (box.width() <= 1f || box.height() <= 1f) return
+        val spacing = (8f * pxPerCm).coerceAtLeast(4f)
+        val diag = sqrt(box.width() * box.width() + box.height() * box.height())
+        val half = diag / 2f
+        val cx = box.centerX()
+        val cy = box.centerY()
+        val angle = PI / 4
+        val dx = cos(angle).toFloat()
+        val dy = sin(angle).toFloat()
+        val nx = -dy
+        val ny = dx
+        canvas.save()
+        canvas.clipPath(path)
+        var offset = -half
+        while (offset <= half) {
+            val mx = cx + nx * offset
+            val my = cy + ny * offset
+            canvas.drawLine(
+                mx - dx * half,
+                my - dy * half,
+                mx + dx * half,
+                my + dy * half,
+                paint,
+            )
+            offset += spacing
+        }
+        canvas.restore()
     }
 }

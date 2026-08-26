@@ -23,6 +23,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontStyle
@@ -91,20 +93,50 @@ fun InkPillButton(
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
 ) {
-    val shape = RoundedCornerShape(999.dp)
-    Box(
+    val shape = RoundedCornerShape(18.dp)
+    val cream = Color(0xFFFCFAF6)
+    Row(
         modifier = modifier
+            .height(56.dp)
             .clip(shape)
-            .background(if (enabled) HdTheme.colors.ink else HdTheme.colors.stone.copy(alpha = 0.35f))
+            .background(
+                if (enabled) {
+                    Brush.linearGradient(listOf(Color(0xFF2A2420), Color(0xFF1A1714)))
+                } else {
+                    Brush.linearGradient(
+                        listOf(
+                            HdTheme.colors.stone.copy(alpha = 0.35f),
+                            HdTheme.colors.stone.copy(alpha = 0.35f),
+                        ),
+                    )
+                },
+            )
+            .border(0.5.dp, Color.White.copy(alpha = 0.12f), shape)
             .clickable(enabled = enabled, onClick = onClick)
-            .padding(horizontal = 28.dp, vertical = 16.dp),
-        contentAlignment = Alignment.Center,
+            .padding(horizontal = 18.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.Center,
     ) {
         Text(
             text = label,
             style = HdTheme.typography.labelLarge,
-            color = HdTheme.colors.paper,
+            color = cream,
         )
+        Spacer(Modifier.width(10.dp))
+        Box(
+            modifier = Modifier
+                .size(22.dp)
+                .clip(CircleShape)
+                .background(HdTheme.colors.terracotta),
+            contentAlignment = Alignment.Center,
+        ) {
+            SfIcon(
+                HdSfIcons.arrowRight,
+                contentDescription = null,
+                tint = cream,
+                size = 11.dp,
+            )
+        }
     }
 }
 

@@ -48,6 +48,7 @@ object ShowcaseVilla {
             height = 290.0,
             level = level.id,
             arcExtent = arc,
+            pattern = "hatchUp",
             leftSideColor = "FFF7F5F1",
             rightSideColor = "FFF7F5F1",
             topColor = "FFF2F0EC",

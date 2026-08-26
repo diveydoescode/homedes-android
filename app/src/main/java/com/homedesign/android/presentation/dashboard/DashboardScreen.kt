@@ -25,6 +25,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -48,6 +49,12 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -59,14 +66,18 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -79,6 +90,8 @@ import com.homedesign.android.core.ui.HdSfIcons
 import com.homedesign.android.core.ui.SfIcon
 import com.homedesign.android.core.ui.hdGlassCapsule
 import com.homedesign.android.core.ui.relativeTime
+import com.homedesign.android.core.ui.theme.HdMono
+import com.homedesign.android.core.ui.theme.HdSerif
 import com.homedesign.android.core.ui.theme.HdTheme
 import com.homedesign.android.domain.io.HomedesignZip
 import com.homedesign.android.domain.model.UnitFormat
@@ -259,6 +272,12 @@ class DashboardViewModel @Inject constructor(
     fun dismissResumeSession() {
         viewModelScope.launch { settingsRepository.clearEditorSession() }
     }
+
+    init {
+        viewModelScope.launch(Dispatchers.Default) {
+            runCatching { projectRepository.refreshThumbnails() }
+        }
+    }
 }
 
 private sealed interface ProjectOverlay {
@@ -360,7 +379,6 @@ fun DashboardScreen(
                             unitSystem = state.unitSystem,
                             onClick = { onOpenProject(meta.id) },
                             onLongClick = { openInfo(meta) },
-                            onMore = { openInfo(meta) },
                             modifier = Modifier.padding(top = 20.dp),
                         )
                     }
@@ -418,11 +436,31 @@ fun DashboardScreen(
                     .verticalScroll(rememberScrollState())
                     .padding(horizontal = 22.dp, vertical = 8.dp),
             ) {
-                Text("New design", style = HdTheme.typography.headlineSmall, color = HdTheme.colors.ink)
+                // iOS NewDesignSheet: "New " serif + italic "design" on one line.
+                Text(
+                    text = buildAnnotatedString {
+                        append("New ")
+                        withStyle(
+                            SpanStyle(
+                                fontStyle = FontStyle.Italic,
+                                fontFamily = HdSerif,
+                            ),
+                        ) {
+                            append("design")
+                        }
+                    },
+                    style = HdTheme.typography.headlineMedium.copy(
+                        fontFamily = HdSerif,
+                        fontWeight = FontWeight.Normal,
+                        fontSize = 24.sp,
+                        lineHeight = 30.sp,
+                    ),
+                    color = HdTheme.colors.ink,
+                )
                 Text(
                     "Three ways in.",
-                    style = HdTheme.typography.bodySmall,
-                    color = HdTheme.colors.stone,
+                    style = HdTheme.typography.bodySmall.copy(fontSize = 13.5.sp),
+                    color = HdTheme.colors.graphite,
                     modifier = Modifier.padding(top = 6.dp),
                 )
                 Spacer(Modifier.height(16.dp))
@@ -479,12 +517,25 @@ fun DashboardScreen(
                     verticalAlignment = Alignment.Top,
                     horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
-                    Text(
-                        "From a template",
-                        style = HdTheme.typography.headlineSmall,
-                        color = HdTheme.colors.ink,
-                        modifier = Modifier.weight(1f),
-                    )
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            "NEW DESIGN",
+                            fontFamily = HdMono,
+                            fontSize = 10.sp,
+                            letterSpacing = 1.6.sp,
+                            color = HdTheme.colors.stone,
+                        )
+                        Text(
+                            text = buildAnnotatedString {
+                                append("From a ")
+                                withStyle(SpanStyle(fontStyle = FontStyle.Italic, fontFamily = HdSerif)) {
+                                    append("template")
+                                }
+                            },
+                            style = HdTheme.typography.headlineMedium.copy(fontFamily = HdSerif),
+                            color = HdTheme.colors.ink,
+                        )
+                    }
                     Box(
                         modifier = Modifier
                             .size(32.dp)
@@ -502,25 +553,43 @@ fun DashboardScreen(
                     }
                 }
                 Spacer(Modifier.height(16.dp))
-                NewActionRow(
-                    title = "Showcase villa",
-                    subtitle = "Sample plan with curved wall & rooms",
-                    iconRes = HdSfIcons.houseFill,
+                TemplateCard(
+                    title = "Modern Flat",
+                    blurb = "Open plan · 2 rooms",
+                    iconRes = HdSfIcons.building2Fill,
                     onClick = {
                         showTemplateSheet = false
                         viewModel.openShowcase(onOpenProject)
                     },
                 )
-                Spacer(Modifier.height(8.dp))
-                NewActionRow(
-                    title = "Sample .sh3d",
-                    subtitle = "Bundled test plan (walls & furniture)",
-                    iconRes = HdSfIcons.folder,
+                Spacer(Modifier.height(10.dp))
+                TemplateCard(
+                    title = "Bedroom",
+                    blurb = "Sleeping suite · 1 room",
+                    iconRes = HdSfIcons.houseFill,
                     onClick = {
                         showTemplateSheet = false
                         viewModel.openSampleSh3d(onOpenProject)
                     },
                 )
+                Spacer(Modifier.height(10.dp))
+                TemplateCard(
+                    title = "Loft Apartment",
+                    blurb = "Double-height · 3 rooms",
+                    iconRes = HdSfIcons.houseLodgeFill,
+                    onClick = {
+                        showTemplateSheet = false
+                        viewModel.openShowcase(onOpenProject)
+                    },
+                )
+                Spacer(Modifier.height(18.dp))
+                Text(
+                    "Templates are fully editable once opened.",
+                    style = HdTheme.typography.bodySmall,
+                    color = HdTheme.colors.stone,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(Modifier.height(12.dp))
                 Spacer(Modifier.height(8.dp))
                 NewActionRow(
                     title = "Open .homedesign",
@@ -732,72 +801,94 @@ private fun HeroCard(
     unitSystem: UnitSystem,
     onClick: () -> Unit,
     onLongClick: () -> Unit,
-    onMore: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Column(
+    val shape = RoundedCornerShape(16.dp)
+    Row(
         modifier = modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(18.dp))
-            .background(HdTheme.colors.highlight)
-            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
-            .padding(16.dp),
+            .height(120.dp)
+            .shadow(
+                elevation = 10.dp,
+                shape = shape,
+                ambientColor = Color(0xFF1A1714).copy(alpha = 0.06f),
+                spotColor = Color(0xFF1A1714).copy(alpha = 0.06f),
+            )
+            .clip(shape)
+            .background(HdTheme.colors.ivory)
+            .border(0.5.dp, HdTheme.colors.hairline, shape)
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick),
     ) {
         Box(
             modifier = Modifier
-                .fillMaxWidth()
-                .aspectRatio(1.6f)
-                .clip(RoundedCornerShape(12.dp))
-                .background(HdTheme.colors.sand),
-            contentAlignment = Alignment.Center,
+                .width(116.dp)
+                .fillMaxHeight()
+                .background(Color(0xFFF3F7FB)),
         ) {
             PlanThumbImage(meta = meta, modifier = Modifier.fillMaxSize())
-            IconButton(
-                onClick = onMore,
-                modifier = Modifier.align(Alignment.TopEnd),
+        }
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxHeight()
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+        ) {
+            Text(
+                text = "Continue · ${relativeTime(meta.updatedAt)}".uppercase(),
+                style = HdTheme.typography.labelSmall.copy(
+                    fontSize = 9.5.sp,
+                    letterSpacing = 1.4.sp,
+                ),
+                color = HdTheme.colors.stone,
+            )
+            Text(
+                meta.name.uppercase(),
+                style = HdTheme.typography.headlineSmall.copy(
+                    fontFamily = HdSerif,
+                    fontSize = 19.sp,
+                    letterSpacing = (-0.2).sp,
+                ),
+                color = HdTheme.colors.ink,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(top = 4.dp),
+            )
+            Row(
+                modifier = Modifier.padding(top = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
+                Text(
+                    "L${meta.levelCount}",
+                    fontFamily = HdMono,
+                    fontSize = 11.5.sp,
+                    color = HdTheme.colors.ink,
+                )
+                Text("·", color = HdTheme.colors.stone)
+                Text(
+                    "${meta.roomCount} room${if (meta.roomCount == 1) "" else "s"}",
+                    style = HdTheme.typography.bodySmall.copy(fontSize = 11.5.sp),
+                    color = HdTheme.colors.graphite,
+                )
+            }
+            Spacer(Modifier.weight(1f))
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Text(
+                    "Resume",
+                    style = HdTheme.typography.titleSmall.copy(fontSize = 13.sp),
+                    color = HdTheme.colors.ink,
+                )
                 SfIcon(
-                    HdSfIcons.ellipsis,
-                    contentDescription = "More for ${meta.name}",
+                    HdSfIcons.arrowRight,
+                    contentDescription = null,
                     tint = HdTheme.colors.ink,
-                    size = 18.dp,
+                    size = 11.dp,
                 )
             }
         }
-        Spacer(Modifier.height(14.dp))
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            Text(
-                text = "Continue",
-                style = HdTheme.typography.labelMedium,
-                color = HdTheme.colors.terracotta,
-                fontWeight = FontWeight.SemiBold,
-            )
-            SfIcon(
-                HdSfIcons.arrowRight,
-                contentDescription = null,
-                tint = HdTheme.colors.terracotta,
-                size = 11.dp,
-            )
-        }
-        Spacer(Modifier.height(4.dp))
-        Text(meta.name, style = HdTheme.typography.titleLarge, color = HdTheme.colors.ink)
-        Text(
-            text = buildString {
-                append(UnitFormat.area(meta.floorAreaM2, unitSystem))
-                append(" · ")
-                append(relativeTime(meta.updatedAt))
-                if (meta.levelCount > 1) {
-                    append(" · ")
-                    append(meta.levelCount)
-                    append(" floors")
-                }
-            },
-            style = HdTheme.typography.bodySmall,
-            color = HdTheme.colors.stone,
-        )
     }
 }
 
@@ -810,20 +901,25 @@ private fun ProjectCard(
     onLongClick: () -> Unit,
     onMore: () -> Unit,
 ) {
+    val shape = RoundedCornerShape(18.dp)
     Column(
         modifier = Modifier
-            .clip(RoundedCornerShape(14.dp))
-            .border(1.dp, HdTheme.colors.hairline, RoundedCornerShape(14.dp))
-            .background(HdTheme.colors.ivory)
-            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
-            .padding(10.dp),
+            .shadow(
+                elevation = 8.dp,
+                shape = shape,
+                ambientColor = Color(0xFF1A1714).copy(alpha = 0.07f),
+                spotColor = Color(0xFF1A1714).copy(alpha = 0.07f),
+            )
+            .clip(shape)
+            .background(Color.White)
+            .border(0.5.dp, Color(0xFF1A1714).copy(alpha = 0.08f), shape)
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick),
     ) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .aspectRatio(1.15f)
-                .clip(RoundedCornerShape(10.dp))
-                .background(HdTheme.colors.highlight),
+                .aspectRatio(1f)
+                .background(Color.White),
             contentAlignment = Alignment.Center,
         ) {
             PlanThumbImage(meta = meta, modifier = Modifier.fillMaxSize())
@@ -835,27 +931,45 @@ private fun ProjectCard(
                     HdSfIcons.ellipsis,
                     contentDescription = "More for ${meta.name}",
                     tint = HdTheme.colors.ink,
-                    size = 18.dp,
+                    size = 16.dp,
                 )
             }
         }
-        Spacer(Modifier.height(10.dp))
-        Text(meta.name, style = HdTheme.typography.titleSmall, color = HdTheme.colors.ink, maxLines = 1)
-        Text(
-            text = buildString {
-                append(UnitFormat.area(meta.floorAreaM2, unitSystem))
-                append(" · ")
-                append(relativeTime(meta.updatedAt))
-                if (meta.levelCount > 1) {
-                    append(" · ")
-                    append(meta.levelCount)
-                    append(" floors")
-                }
-            },
-            style = HdTheme.typography.labelSmall,
-            color = HdTheme.colors.stone,
-            maxLines = 2,
-        )
+        Column(
+            modifier = Modifier.padding(start = 13.dp, end = 13.dp, top = 10.dp, bottom = 13.dp),
+            verticalArrangement = Arrangement.spacedBy(3.dp),
+        ) {
+            Text(
+                meta.name.uppercase(),
+                style = HdTheme.typography.titleSmall.copy(
+                    fontSize = 13.5.sp,
+                    fontWeight = FontWeight.Medium,
+                    letterSpacing = (-0.1).sp,
+                ),
+                color = HdTheme.colors.ink,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Text(
+                    text = "L${meta.levelCount}",
+                    style = HdTheme.typography.labelSmall.copy(
+                        fontSize = 11.sp,
+                        letterSpacing = 0.sp,
+                    ),
+                    color = HdTheme.colors.ink,
+                )
+                Text("·", color = HdTheme.colors.stone, fontSize = 11.sp)
+                Text(
+                    text = relativeTime(meta.updatedAt),
+                    style = HdTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                    color = HdTheme.colors.stone,
+                )
+            }
+        }
     }
 }
 
@@ -957,6 +1071,49 @@ private fun NewActionRow(
     }
 }
 
+@Composable
+private fun TemplateCard(
+    title: String,
+    blurb: String,
+    @DrawableRes iconRes: Int,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(HdTheme.colors.ivory)
+            .border(0.5.dp, HdTheme.colors.hairline, RoundedCornerShape(14.dp))
+            .clickable(onClick = onClick)
+            .padding(12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        Box(
+            modifier = Modifier
+                .size(width = 72.dp, height = 56.dp)
+                .clip(RoundedCornerShape(10.dp))
+                .background(
+                    Brush.linearGradient(
+                        listOf(
+                            HdTheme.colors.sand,
+                            HdTheme.colors.highlight,
+                        ),
+                    ),
+                )
+                .border(0.5.dp, HdTheme.colors.hairline, RoundedCornerShape(10.dp)),
+            contentAlignment = Alignment.Center,
+        ) {
+            SfIcon(iconRes, contentDescription = null, tint = HdTheme.colors.terracotta, size = 22.dp)
+        }
+        Column(modifier = Modifier.weight(1f)) {
+            Text(title, style = HdTheme.typography.headlineSmall.copy(fontFamily = HdSerif, fontSize = 18.sp), color = HdTheme.colors.ink)
+            Text(blurb, style = HdTheme.typography.bodySmall, color = HdTheme.colors.stone)
+        }
+        SfIcon(HdSfIcons.chevronRight, contentDescription = null, tint = HdTheme.colors.stone, size = 13.dp)
+    }
+}
+
 private fun dashboardInitials(firstName: String, lastName: String): String {
     val letters = listOf(firstName, lastName)
         .mapNotNull { it.trim().firstOrNull()?.uppercaseChar() }
@@ -968,7 +1125,7 @@ private fun dashboardInitials(firstName: String, lastName: String): String {
 private fun Modifier.dashboardPill(): Modifier =
     hdGlassCapsule(
         backdrop = null,
-        fallbackFill = HdTheme.colors.ivory,
+        fallbackFill = Color.White.copy(alpha = 0.55f),
     )
 
 @Composable
@@ -991,39 +1148,46 @@ private fun DashboardChrome(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text(
                     text = "Designs",
-                    style = HdTheme.typography.displaySmall.copy(
-                        fontSize = 32.sp,
-                        lineHeight = 38.sp,
+                    style = HdTheme.typography.displayMedium.copy(
+                        fontSize = 34.sp,
+                        lineHeight = 34.sp,
                         fontStyle = FontStyle.Italic,
-                        letterSpacing = (-0.4).sp,
+                        letterSpacing = (-0.5).sp,
                     ),
                     color = HdTheme.colors.ink,
                 )
                 Text(
                     text = if (designCount == 1) "1 design" else "$designCount designs",
                     style = HdTheme.typography.labelSmall.copy(
+                        fontSize = 11.sp,
                         fontWeight = FontWeight.Normal,
-                        letterSpacing = 0.sp,
+                        letterSpacing = 0.3.sp,
                     ),
                     color = HdTheme.colors.stone,
                 )
             }
             Box(
                 modifier = Modifier
-                    .size(34.dp)
+                    .size(38.dp)
+                    .shadow(6.dp, CircleShape)
                     .clip(CircleShape)
-                    .background(HdTheme.colors.sand)
-                    .border(0.5.dp, HdTheme.colors.hairline, CircleShape),
+                    .background(
+                        Brush.linearGradient(
+                            listOf(HdTheme.colors.sand, Color(0xFFDCCDA9)),
+                        ),
+                    )
+                    .border(1.5.dp, Color.White, CircleShape),
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
                     text = initials,
                     style = HdTheme.typography.titleSmall.copy(
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Medium,
+                        fontFamily = HdSerif,
+                        fontStyle = FontStyle.Italic,
+                        fontSize = 14.sp,
                     ),
                     color = HdTheme.colors.ink,
                 )
@@ -1038,9 +1202,9 @@ private fun DashboardChrome(
             Row(
                 modifier = Modifier
                     .weight(1f)
-                    .height(38.dp)
+                    .height(42.dp)
                     .dashboardPill()
-                    .padding(horizontal = 12.dp),
+                    .padding(horizontal = 16.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
@@ -1097,7 +1261,7 @@ private fun DashboardChrome(
             Box {
                 Row(
                     modifier = Modifier
-                        .height(38.dp)
+                        .height(42.dp)
                         .dashboardPill()
                         .clickable { onSortMenu(true) }
                         .padding(horizontal = 14.dp),
@@ -1304,18 +1468,13 @@ private fun NewDesignFab(
     modifier: Modifier = Modifier,
 ) {
     Box(
-        modifier = modifier.size(72.dp),
+        modifier = modifier.size(56.dp),
         contentAlignment = Alignment.Center,
     ) {
         Box(
             modifier = Modifier
-                .size(72.dp)
-                .border(1.5.dp, HdTheme.colors.terracotta.copy(alpha = 0.55f), CircleShape),
-        )
-        Box(
-            modifier = Modifier
                 .size(56.dp)
-                .shadow(elevation = 14.dp, shape = CircleShape)
+                .shadow(12.dp, CircleShape)
                 .clip(CircleShape)
                 .background(HdTheme.colors.ink)
                 .clickable(onClick = onClick),
@@ -1324,7 +1483,7 @@ private fun NewDesignFab(
             SfIcon(
                 HdSfIcons.plus,
                 contentDescription = "New design",
-                tint = HdTheme.colors.paper,
+                tint = Color.White,
                 size = 22.dp,
             )
         }

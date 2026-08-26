@@ -456,6 +456,30 @@ class EditorViewModel @Inject constructor(
         publish(toast = "Rotated plan")
     }
 
+    fun detectRoomsFromWalls() {
+        val home = document.home
+        val rooms = com.homedesign.android.domain.geom.RoomDetection.reconcileRooms(
+            walls = home.walls,
+            existing = home.rooms,
+            level = home.selectedLevelID,
+        )
+        if (rooms == home.rooms) {
+            publish(toast = "No new rooms")
+            return
+        }
+        document.replaceHome(home.copy(rooms = rooms, topologyVersion = home.topologyVersion + 1))
+        markDirty(coalesce = false)
+        publish(toast = "Rooms detected")
+    }
+
+    fun addExteriorDimensions() {
+        val next = applyExteriorDimensionChain(document.home)
+        if (next === document.home) return
+        document.replaceHome(next)
+        markDirty(coalesce = false)
+        publish(toast = "Dimensions added")
+    }
+
     fun setDimensionLength(lengthCM: Double) {
         val sel = document.selection as? Selection.Annotation ?: return
         if (sel.isLabel) return
@@ -1022,6 +1046,15 @@ class EditorViewModel @Inject constructor(
         publish()
     }
 
+    fun setAllOpeningsOpen(open: Boolean) {
+        val home = document.home
+        if (home.doorsAndWindows.isEmpty()) return
+        val nextDoors = home.doorsAndWindows.map { it.copy(isOpen = open) }
+        document.replaceHome(home.copy(doorsAndWindows = nextDoors))
+        markDirty(coalesce = false)
+        publish()
+    }
+
     private fun flipOpening(axis: Char) {
         val id = when (val sel = document.selection) {
             is Selection.Opening -> sel.id
@@ -1246,6 +1279,16 @@ class EditorViewModel @Inject constructor(
         markDirty(coalesce = false)
         publish()
         _state.update { it.copy(preview = DrawPreview.Wall(end, end, thickness)) }
+    }
+
+    fun applyHomeStylePreset(id: String) {
+        val preset = com.homedesign.android.domain.editor.HomeStylePreset.entries
+            .find { it.id == id } ?: return
+        val next = com.homedesign.android.domain.editor.applyHomeStyle(document.home, preset)
+        if (next === document.home) return
+        document.replaceHome(next)
+        markDirty(coalesce = false)
+        publish(toast = "${preset.displayName} style")
     }
 
     fun applyExteriorDims() {

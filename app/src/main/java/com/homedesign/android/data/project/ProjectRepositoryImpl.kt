@@ -105,6 +105,16 @@ class ProjectRepositoryImpl @Inject constructor(
         dao.touch(id, System.currentTimeMillis())
     }
 
+    override suspend fun refreshThumbnails() {
+        val dir = HomedesignZip.embeddedTextureDirectory(appContext.filesDir)
+        for (entity in dao.listAll()) {
+            val bytes = entity.archiveBlob ?: continue
+            val home = runCatching { HomedesignZip.decode(bytes, dir) }.getOrNull() ?: continue
+            val thumb = bestEffortThumb(home) ?: continue
+            dao.upsert(entity.copy(thumbnailBlob = thumb))
+        }
+    }
+
     private suspend fun persistNew(
         home: Home,
         name: String,

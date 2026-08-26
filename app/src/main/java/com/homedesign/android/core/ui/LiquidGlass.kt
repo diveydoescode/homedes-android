@@ -45,20 +45,23 @@ fun rememberHdLayerBackdrop(paper: Color = HdTheme.colors.paper): LayerBackdrop 
 fun Modifier.hdGlassChrome(
     backdrop: Backdrop?,
     shape: Shape = RoundedCornerShape(14.dp),
-    surfaceAlpha: Float = 0.48f,
-    blurRadius: Dp = 4.dp,
+    surfaceAlpha: Float = 0.55f,
+    blurRadius: Dp = 20.dp,
     lensRadius: Dp = 16.dp,
     lensHeight: Dp = 32.dp,
-    borderColor: Color = Color.Black.copy(alpha = 0.10f),
-    fallbackFill: Color = Color.White.copy(alpha = 0.88f),
-    elevation: Dp = 4.dp,
+    borderColor: Color = Color.White.copy(alpha = 0.75f),
+    fallbackFill: Color = Color.White.copy(alpha = 0.55f),
+    elevation: Dp = 8.dp,
+    dark: Boolean = false,
 ): Modifier {
+    val fill = if (dark) Color(0xFF1A1714).copy(alpha = 0.55f) else fallbackFill
+    val edge = if (dark) Color.White.copy(alpha = 0.16f) else borderColor
     val base = this.shadow(
         elevation = elevation,
         shape = shape,
         clip = false,
-        ambientColor = Color.Black.copy(alpha = 0.06f),
-        spotColor = Color.Black.copy(alpha = 0.08f),
+        ambientColor = Color(0xFF1A1714).copy(alpha = 0.10f),
+        spotColor = Color(0xFF1A1714).copy(alpha = 0.10f),
     )
     return if (liquidGlassSupported && backdrop != null) {
         base
@@ -71,30 +74,35 @@ fun Modifier.hdGlassChrome(
                     lens(lensRadius.toPx(), lensHeight.toPx())
                 },
                 onDrawSurface = {
-                    drawRect(Color.White.copy(alpha = surfaceAlpha))
+                    drawRect(
+                        if (dark) Color(0xFF1A1714).copy(alpha = 0.55f)
+                        else Color.White.copy(alpha = surfaceAlpha),
+                    )
                 },
             )
-            .border(0.5.dp, borderColor, shape)
+            .border(0.5.dp, edge, shape)
     } else {
         base
             .clip(shape)
-            .background(fallbackFill, shape)
-            .border(0.5.dp, borderColor, shape)
+            .background(fill, shape)
+            .border(0.5.dp, edge, shape)
     }
 }
 
-/** Capsule dock / FAB glass (999 radius) — iOS EditorDock elevation 6. */
+/** Capsule dock / FAB glass (999 radius) — GlassV2 recipe. */
 fun Modifier.hdGlassCapsule(
     backdrop: Backdrop?,
-    surfaceAlpha: Float = 0.50f,
-    fallbackFill: Color = Color.White.copy(alpha = 0.92f),
+    surfaceAlpha: Float = 0.55f,
+    fallbackFill: Color = Color.White.copy(alpha = 0.55f),
+    dark: Boolean = false,
 ): Modifier = hdGlassChrome(
     backdrop = backdrop,
     shape = RoundedCornerShape(999.dp),
     surfaceAlpha = surfaceAlpha,
-    blurRadius = 4.dp,
+    blurRadius = 24.dp,
     lensRadius = 12.dp,
     lensHeight = 24.dp,
     fallbackFill = fallbackFill,
-    elevation = 6.dp,
+    elevation = 8.dp,
+    dark = dark,
 )

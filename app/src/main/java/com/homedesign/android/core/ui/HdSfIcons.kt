@@ -88,6 +88,7 @@ object HdSfIcons {
     @DrawableRes val photoFill = R.drawable.sf_photo_fill
     @DrawableRes val photoOnRectangle = R.drawable.sf_photo_on_rectangle
     @DrawableRes val cameraFill = R.drawable.sf_camera_fill
+    @DrawableRes val square3Layers = R.drawable.sf_square_3_layers
     @DrawableRes val squareAndArrowDown = R.drawable.sf_square_and_arrow_down
 }
 

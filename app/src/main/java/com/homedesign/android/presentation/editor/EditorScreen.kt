@@ -7,6 +7,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -62,6 +63,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
@@ -140,6 +142,9 @@ fun EditorScreen(
     var furnitureBoxDraft by remember { mutableStateOf("") }
     /** Phone wall sheet: peek (~96dp) vs expanded inspector. */
     var wallSheetExpanded by remember { mutableStateOf(false) }
+    var showLighting by remember { mutableStateOf(false) }
+    var lightingPreset by remember { mutableStateOf("studio") }
+    var lightingStyle by remember { mutableStateOf<String?>(null) }
     /** null = floor; "left"/"right" = wall side finish. */
     var pendingTextureImport by remember { mutableStateOf<String?>(null) }
     val snackbar = remember { SnackbarHostState() }
@@ -194,6 +199,12 @@ fun EditorScreen(
 
     LaunchedEffect(projectId) {
         viewModel.load(projectId)
+    }
+
+    LaunchedEffect(state.selection) {
+        if (state.selection !is Selection.Wall && state.selection !is Selection.Endpoint) {
+            wallSheetExpanded = false
+        }
     }
 
     LaunchedEffect(Unit) {
@@ -293,6 +304,9 @@ fun EditorScreen(
                     },
                     walkPose = state.walkPose,
                     onBackToPlan = { viewModel.setViewMode(EditorViewMode.Plan2D) },
+                    onOpenAllOpenings = { viewModel.setAllOpeningsOpen(true) },
+                    onCloseAllOpenings = { viewModel.setAllOpeningsOpen(false) },
+                    showLightingChip = false,
                     modifier = Modifier
                         .fillMaxSize()
                         .hdLayerBackdrop(glassBackdrop),
@@ -384,25 +398,32 @@ fun EditorScreen(
                             cameraMode = Plan3DCameraMode.Orbit,
                             walkPose = state.walkPose,
                             onBackToPlan = { viewModel.setViewMode(EditorViewMode.Plan2D) },
+                            onOpenAllOpenings = { viewModel.setAllOpeningsOpen(true) },
+                            onCloseAllOpenings = { viewModel.setAllOpeningsOpen(false) },
+                            showLightingChip = false,
                             modifier = Modifier.weight(1f).fillMaxHeight(),
                         )
                     }
                 } else {
+                    // iOS IMG_9203: 2D above / 3D below.
                     Column(splitPad) {
-                        Plan3DScreen(
-                            home = state.home,
-                            cameraMode = Plan3DCameraMode.Orbit,
-                            walkPose = state.walkPose,
-                            onBackToPlan = { viewModel.setViewMode(EditorViewMode.Plan2D) },
-                            modifier = Modifier.weight(0.45f).fillMaxWidth(),
-                        )
+                        planCanvas(Modifier.weight(0.55f).fillMaxWidth())
                         Box(
                             Modifier
                                 .fillMaxWidth()
                                 .height(1.dp)
                                 .background(HdTheme.colors.hairline),
                         )
-                        planCanvas(Modifier.weight(0.55f).fillMaxWidth())
+                        Plan3DScreen(
+                            home = state.home,
+                            cameraMode = Plan3DCameraMode.Orbit,
+                            walkPose = state.walkPose,
+                            onBackToPlan = { viewModel.setViewMode(EditorViewMode.Plan2D) },
+                            onOpenAllOpenings = { viewModel.setAllOpeningsOpen(true) },
+                            onCloseAllOpenings = { viewModel.setAllOpeningsOpen(false) },
+                            showLightingChip = false,
+                            modifier = Modifier.weight(0.45f).fillMaxWidth(),
+                        )
                     }
                 }
             }
@@ -492,66 +513,51 @@ fun EditorScreen(
                     size = 18.dp,
                 )
             }
-            // iOS Deck title stack — fixed band so chrome controls cannot crush it to 0 width
-            Column(
+            Text(
+                text = (state.title.ifBlank { "Untitled" }).take(10),
+                color = HdTheme.colors.architectInk,
+                fontFamily = HdSans,
+                fontWeight = FontWeight.Medium,
+                fontSize = 14.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
                 modifier = Modifier
-                    .widthIn(min = 88.dp, max = 160.dp)
-                    .padding(end = 6.dp),
-            ) {
-                Text(
-                    text = state.title.ifBlank { "Untitled" },
-                    color = HdTheme.colors.architectInk,
-                    fontFamily = HdSerif,
-                    fontWeight = FontWeight.Medium,
-                    fontSize = 16.sp,
-                    lineHeight = 20.sp,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Text(
-                    text = state.savedLabel,
-                    color = HdTheme.colors.architectGray,
-                    fontFamily = HdMono,
-                    fontWeight = FontWeight.Normal,
-                    fontSize = 9.5.sp,
-                    lineHeight = 12.sp,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
+                    .widthIn(min = 28.dp, max = 88.dp)
+                    .padding(end = 4.dp),
+            )
             Spacer(Modifier.weight(1f))
-            if (showPlanChrome) {
-                UnitSystemChips(
-                    selected = state.unitSystem,
-                    onSelect = viewModel::setUnitSystem,
-                )
-                Spacer(Modifier.width(4.dp))
-            }
             EditorModeIconSwitch(
                 selected = state.viewMode,
                 onSelect = viewModel::setViewMode,
                 showSplit = true,
             )
+            if (showPlanChrome) {
+                Spacer(Modifier.width(4.dp))
+                UnitCycleChip(
+                    selected = state.unitSystem,
+                    onSelect = viewModel::setUnitSystem,
+                )
+            }
             IconButton(
-                onClick = { viewModel.exportPdf() },
-                modifier = Modifier.size(36.dp),
+                onClick = { showLighting = !showLighting },
+                modifier = Modifier.size(32.dp),
             ) {
                 SfIcon(
-                    HdSfIcons.squareAndArrowUp,
-                    contentDescription = "Share or export",
-                    tint = HdTheme.colors.architectInk,
+                    if (showLighting) HdSfIcons.sunMaxFill else HdSfIcons.sunMax,
+                    contentDescription = "Lighting",
+                    tint = HdTheme.colors.selection,
                     size = 17.dp,
                 )
             }
             Box {
                 IconButton(
                     onClick = { exportOpen = true },
-                    modifier = Modifier.size(36.dp),
+                    modifier = Modifier.size(32.dp),
                 ) {
                     SfIcon(
-                        HdSfIcons.ellipsis,
-                        contentDescription = "More",
-                        tint = HdTheme.colors.architectInk,
+                        HdSfIcons.folder,
+                        contentDescription = "File menu",
+                        tint = HdTheme.colors.selection,
                         size = 17.dp,
                     )
                 }
@@ -686,6 +692,24 @@ fun EditorScreen(
             }
         }
 
+        // iOS ScenePreviewView: blue floor chip on the 3D pane (top-trailing), not the top strip.
+        if (state.viewMode == EditorViewMode.View3D || state.viewMode == EditorViewMode.Split) {
+            FloorSelectorButton(
+                levels = state.home.levels,
+                selectedLevelID = state.home.selectedLevelID,
+                ghostOtherLevels = state.ghostOtherLevels,
+                menuOpen = floorMenuOpen,
+                onMenuOpenChange = { floorMenuOpen = it },
+                onSelectLevel = viewModel::selectLevel,
+                onAddFloor = viewModel::addFloorOnTop,
+                onToggleGhost = viewModel::toggleGhostOtherLevels,
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .statusBarsPadding()
+                    .padding(top = TopChromeClearance + 4.dp, end = 10.dp),
+            )
+        }
+
         if (showPlanChrome &&
             state.showEditorTip &&
             placeTool == null &&
@@ -759,19 +783,18 @@ fun EditorScreen(
                         SfIcon(
                             if (measure) HdSfIcons.ruler else HdSfIcons.cursorarrow,
                             contentDescription = null,
-                            tint = if (measure) HdTheme.colors.paper else HdTheme.colors.architectInk,
+                            tint = if (measure) Color.White else HdTheme.colors.architectInk,
                         )
                     }
                     DockItem(
                         label = "Add",
-                        ink = true,
                         chevron = true,
                         onClick = { showAdd = true },
                     ) {
                         SfIcon(
                             HdSfIcons.plus,
                             contentDescription = null,
-                            tint = HdTheme.colors.paper,
+                            tint = HdTheme.colors.architectInk,
                         )
                     }
                     DockItem(
@@ -808,7 +831,7 @@ fun EditorScreen(
                             HdSfIcons.figureWalk,
                             contentDescription = null,
                             tint = if (state.viewMode == EditorViewMode.Walk) {
-                                HdTheme.colors.paper
+                                Color.White
                             } else {
                                 HdTheme.colors.architectInk
                             },
@@ -847,14 +870,45 @@ fun EditorScreen(
                     .padding(start = 10.dp, top = TopChromeClearance),
             )
 
+            val selectedWall = when (val sel = state.selection) {
+                is Selection.Wall -> state.home.walls.find { it.id == sel.id }
+                is Selection.Endpoint -> state.home.walls.find { it.id == sel.wallID }
+                else -> null
+            }
+            if (selectedWall != null) {
+                val wallLen = kotlin.math.hypot(
+                    selectedWall.endX - selectedWall.startX,
+                    selectedWall.endY - selectedWall.startY,
+                )
+                Text(
+                    text = "Wall · ${UnitFormat.length(wallLen, state.unitSystem)}",
+                    color = HdTheme.colors.architectInk,
+                    fontFamily = HdSans,
+                    fontWeight = FontWeight.Medium,
+                    fontSize = 13.sp,
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .statusBarsPadding()
+                        .padding(top = TopChromeClearance + 4.dp)
+                        .hdGlassCapsule(
+                            backdrop = glassBackdrop,
+                            fallbackFill = HdTheme.colors.ivory.copy(alpha = 0.94f),
+                        )
+                        .clickable { wallSheetExpanded = true }
+                        .padding(horizontal = 14.dp, vertical = 8.dp),
+                )
+            }
+
             // iOS PlanCanvasView right-edge tool circles
             PlanToolRail(
                 selection = state.selection,
                 orthoLock = state.orthoLock,
                 drawWallActive = state.tool is EditorTool.DrawWall,
+                additiveSelect = additiveSelect,
                 onFlipHinge = viewModel::flipOpeningHinge,
                 onFlipSwing = viewModel::flipOpeningSwing,
-                onWallStyle = viewModel::startFormatPainter,
+                onWallStyle = { wallSheetExpanded = true },
+                onMatchProps = viewModel::startFormatPainter,
                 onFit = viewModel::fitPlanToView,
                 onToggleOrtho = viewModel::toggleOrthoLock,
                 onToggleDrawWall = {
@@ -864,6 +918,13 @@ fun EditorScreen(
                         viewModel.setTool(EditorTool.DrawWall(defaultWallThicknessCM))
                     }
                 },
+                onToggleAdditive = { additiveSelect = !additiveSelect },
+                onDetectRooms = viewModel::detectRoomsFromWalls,
+                onMirrorLR = { viewModel.mirrorPlan(PlanAxis.Vertical) },
+                onMirrorTB = { viewModel.mirrorPlan(PlanAxis.Horizontal) },
+                onRotateCW = { viewModel.rotatePlan(PlanRotation.Clockwise) },
+                onRotateCCW = { viewModel.rotatePlan(PlanRotation.CounterClockwise) },
+                onAddExteriorDims = viewModel::addExteriorDimensions,
                 modifier = Modifier
                     .align(Alignment.TopEnd)
                     .statusBarsPadding()
@@ -944,9 +1005,12 @@ fun EditorScreen(
             )
         }
 
+        val showPropsForMeasure = state.tool is EditorTool.Dimension &&
+            (state.selection is Selection.Furniture ||
+                state.selection is Selection.MultiFurniture)
         if (showPlanChrome &&
             hasSelection &&
-            state.tool is EditorTool.Select
+            (state.tool is EditorTool.Select || showPropsForMeasure)
         ) {
             if (sidePanel) {
                 Box(
@@ -1021,6 +1085,8 @@ fun EditorScreen(
                         onMirrorFurniture = viewModel::mirrorSelection,
                         onDimensionLength = viewModel::setDimensionLength,
                         compact = false,
+                        measureMode = state.tool is EditorTool.Dimension,
+                        onOpenAr = { viewModel.setViewMode(EditorViewMode.AR) },
                         modifier = Modifier
                             .fillMaxWidth()
                             .verticalScroll(rememberScrollState())
@@ -1030,6 +1096,25 @@ fun EditorScreen(
             } else {
                 // Phone props rendered as ModalBottomSheet below (outside plan overlay).
             }
+        }
+
+        if (showLighting) {
+            IosLightingPanel(
+                preset = lightingPreset,
+                onPreset = { lightingPreset = it },
+                styleId = lightingStyle,
+                onStyle = { id ->
+                    lightingStyle = id
+                    viewModel.applyHomeStylePreset(id)
+                },
+                onDismiss = { showLighting = false },
+                onOpenAll = { viewModel.setAllOpeningsOpen(true) },
+                onCloseAll = { viewModel.setAllOpeningsOpen(false) },
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .statusBarsPadding()
+                    .padding(start = 10.dp, end = 10.dp, top = TopChromeClearance - 4.dp),
+            )
         }
 
         SnackbarHost(
@@ -1050,10 +1135,14 @@ fun EditorScreen(
         is Selection.Endpoint -> state.home.walls.find { it.id == sel.wallID }
         else -> null
     }
+    val phoneMeasureProps = state.tool is EditorTool.Dimension &&
+        (state.selection is Selection.Furniture ||
+            state.selection is Selection.MultiFurniture)
     if (!phoneSidePanel &&
         hasSelection &&
-        state.tool is EditorTool.Select &&
-        phonePlanChrome
+        (state.tool is EditorTool.Select || phoneMeasureProps) &&
+        phonePlanChrome &&
+        (phoneWall == null || wallSheetExpanded)
     ) {
         ModalBottomSheet(
             onDismissRequest = {
@@ -1143,6 +1232,8 @@ fun EditorScreen(
                     onMirrorFurniture = viewModel::mirrorSelection,
                     onDimensionLength = viewModel::setDimensionLength,
                     compact = true,
+                    measureMode = state.tool is EditorTool.Dimension,
+                    onOpenAr = { viewModel.setViewMode(EditorViewMode.AR) },
                     modifier = Modifier
                         .fillMaxWidth()
                         .heightIn(max = screenH * 0.45f)
@@ -1162,6 +1253,7 @@ fun EditorScreen(
         ) {
             AddSheetContent(
                 unitSystem = state.unitSystem,
+                onDone = { showAdd = false },
                 onDrawWallInterior = {
                     showAdd = false
                     viewModel.setTool(EditorTool.DrawWall(interiorThicknessCM))
@@ -1307,7 +1399,11 @@ fun EditorScreen(
             FurniturePickerContent(
                 unitSystem = state.unitSystem,
                 recentIds = state.recentFurnitureIds,
-                title = if (catalogReplaceMode) "Replace with…" else "Catalog",
+                title = if (catalogReplaceMode) "Replace with…" else "Add Furniture",
+                onCancel = {
+                    showCatalog = false
+                    catalogReplaceMode = false
+                },
                 onPick = { entry ->
                     showCatalog = false
                     viewModel.recordRecentFurniture(entry.id)
@@ -1365,11 +1461,12 @@ private fun FloorSelectorButton(
     onSelectLevel: (String) -> Unit,
     onAddFloor: () -> Unit,
     onToggleGhost: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val ordered = remember(levels) { LevelMutation.orderedVisible(levels) }
     if (ordered.isEmpty()) return
     val active = ordered.firstOrNull { it.id == selectedLevelID } ?: ordered.first()
-    Box {
+    Box(modifier = modifier) {
         IconButton(onClick = { onMenuOpenChange(true) }) {
             Box(
                 modifier = Modifier
@@ -1678,12 +1775,12 @@ private fun EditorModeIconSwitch(
         add(ModeIcon(EditorViewMode.AR, HdSfIcons.arkit, "AR"))
     }
     Row(
-        horizontalArrangement = Arrangement.spacedBy(2.dp),
+        horizontalArrangement = Arrangement.spacedBy(1.dp),
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
-            .clip(RoundedCornerShape(10.dp))
-            .background(HdTheme.colors.sand.copy(alpha = 0.7f))
-            .padding(3.dp),
+            .clip(RoundedCornerShape(999.dp))
+            .background(Color.Black.copy(alpha = 0.06f))
+            .padding(2.dp),
     ) {
         modes.forEach { item ->
             val active = selected == item.mode ||
@@ -1691,14 +1788,13 @@ private fun EditorModeIconSwitch(
             Box(
                 contentAlignment = Alignment.Center,
                 modifier = Modifier
-                    .size(width = 34.dp, height = 26.dp)
-                    .clip(RoundedCornerShape(7.dp))
-                    .background(if (active) HdTheme.colors.ivory else Color.Transparent)
-                    .border(
-                        width = if (active) 0.5.dp else 0.dp,
-                        color = HdTheme.colors.hairline,
-                        shape = RoundedCornerShape(7.dp),
+                    .size(width = 34.dp, height = 28.dp)
+                    .shadow(
+                        elevation = if (active) 2.dp else 0.dp,
+                        shape = RoundedCornerShape(999.dp),
                     )
+                    .clip(RoundedCornerShape(999.dp))
+                    .background(if (active) Color.White else Color.Transparent)
                     .clickable { onSelect(item.mode) },
             ) {
                 SfIcon(
@@ -1719,6 +1815,168 @@ private fun ViewModeChips(
     showSplit: Boolean = false,
 ) {
     EditorModeIconSwitch(selected = selected, onSelect = onSelect, showSplit = showSplit)
+}
+
+/** iOS lighting popover (IMG_9204) — drops from the sun chip. */
+@Composable
+private fun IosLightingPanel(
+    preset: String,
+    onPreset: (String) -> Unit,
+    styleId: String?,
+    onStyle: (String) -> Unit,
+    onDismiss: () -> Unit,
+    onOpenAll: () -> Unit,
+    onCloseAll: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val ink = HdTheme.colors.architectInk
+    val gray = HdTheme.colors.architectGray
+    val presets = listOf("studio" to "Studio", "flat" to "Flat", "warm" to "Warm", "daylight" to "Daylight", "dusk" to "Dusk")
+    val styles = listOf(
+        "modern" to "Modern",
+        "italian" to "Italian",
+        "mediterranean" to "Mediterranean",
+        "scandinavian" to "Scandinavian",
+    )
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .hdGlassChrome(
+                backdrop = null,
+                shape = RoundedCornerShape(22.dp),
+                fallbackFill = Color.White.copy(alpha = 0.98f),
+            )
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            SfIcon(HdSfIcons.sunMaxFill, contentDescription = null, tint = HdTheme.colors.terracotta, size = 16.dp)
+            Spacer(Modifier.width(8.dp))
+            Column {
+                Text("SCENE", fontFamily = HdMono, fontSize = 9.sp, letterSpacing = 1.4.sp, color = gray)
+                Text("Lighting", fontFamily = HdSerif, fontSize = 20.sp, color = ink)
+            }
+        }
+        Spacer(Modifier.height(12.dp))
+        Row(
+            modifier = Modifier.horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            presets.forEach { (id, label) ->
+                val on = preset == id
+                Text(
+                    text = label,
+                    fontFamily = HdSans,
+                    fontWeight = if (on) FontWeight.SemiBold else FontWeight.Medium,
+                    fontSize = 13.sp,
+                    color = if (on) HdTheme.colors.paper else ink,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(999.dp))
+                        .background(if (on) ink else Color.Black.copy(alpha = 0.06f))
+                        .clickable { onPreset(id) }
+                        .padding(horizontal = 14.dp, vertical = 7.dp),
+                )
+            }
+        }
+        Spacer(Modifier.height(14.dp))
+        Text("Style", fontFamily = HdSans, fontWeight = FontWeight.SemiBold, fontSize = 15.sp, color = ink)
+        Spacer(Modifier.height(8.dp))
+        Row(
+            modifier = Modifier.horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            styles.forEach { (id, label) ->
+                val on = styleId == id
+                Text(
+                    text = label,
+                    fontFamily = HdSans,
+                    fontWeight = if (on) FontWeight.SemiBold else FontWeight.Medium,
+                    fontSize = 14.sp,
+                    color = ink,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(999.dp))
+                        .background(
+                            if (on) Color.Black.copy(alpha = 0.12f)
+                            else Color.Black.copy(alpha = 0.06f),
+                        )
+                        .clickable { onStyle(id) }
+                        .padding(horizontal = 12.dp, vertical = 6.dp),
+                )
+            }
+        }
+        Spacer(Modifier.height(14.dp))
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text("TIME OF DAY", fontFamily = HdMono, fontSize = 9.5.sp, letterSpacing = 1.4.sp, color = gray)
+            Text("Off", fontFamily = HdMono, fontWeight = FontWeight.Medium, fontSize = 18.sp, color = ink)
+        }
+        Spacer(Modifier.height(8.dp))
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(18.dp)
+                .clip(RoundedCornerShape(999.dp))
+                .background(
+                    Brush.horizontalGradient(
+                        listOf(
+                            Color(0xFF2A3550),
+                            Color(0xFF9DB4D4),
+                            Color(0xFFDCEAF4),
+                            Color(0xFFF0C58E),
+                            Color(0xFF5E4A60),
+                            Color(0xFF1A1830),
+                        ),
+                    ),
+                ),
+        )
+        Spacer(Modifier.height(8.dp))
+        Text(
+            "Drag to light the home by sun position — lamps come on as it gets dark. Presets switch the sun off.",
+            fontFamily = HdSans,
+            fontSize = 11.5.sp,
+            color = gray,
+        )
+        Spacer(Modifier.height(12.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+            Text("Open all", color = HdTheme.colors.selection, fontSize = 14.sp, modifier = Modifier.clickable(onClick = onOpenAll))
+            Text("Close all", color = HdTheme.colors.selection, fontSize = 14.sp, modifier = Modifier.clickable(onClick = onCloseAll))
+        }
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 8.dp)
+                .clickable(onClick = onDismiss),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text("⌃", color = gray, fontSize = 16.sp)
+        }
+    }
+}
+
+@Composable
+private fun UnitCycleChip(
+    selected: UnitSystem,
+    onSelect: (UnitSystem) -> Unit,
+) {
+    val label = when (selected) {
+        UnitSystem.Millimetre -> "mm"
+        UnitSystem.Metric -> "cm"
+        UnitSystem.Imperial -> "ft"
+    }
+    val next = when (selected) {
+        UnitSystem.Millimetre -> UnitSystem.Metric
+        UnitSystem.Metric -> UnitSystem.Imperial
+        UnitSystem.Imperial -> UnitSystem.Millimetre
+    }
+    Text(
+        text = label,
+        color = HdTheme.colors.architectInk,
+        fontFamily = HdMono,
+        fontWeight = FontWeight.SemiBold,
+        fontSize = 13.sp,
+        modifier = Modifier
+            .clip(RoundedCornerShape(8.dp))
+            .clickable { onSelect(next) }
+            .padding(horizontal = 8.dp, vertical = 6.dp),
+    )
 }
 
 @Composable
@@ -1804,6 +2062,7 @@ private fun EditorContextChipsRow(
     onToggleOrtho: () -> Unit,
     glassBackdrop: com.kyant.backdrop.Backdrop?,
 ) {
+    if (drawWall == null) return
     Row(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -1814,20 +2073,18 @@ private fun EditorContextChipsRow(
             )
             .padding(horizontal = 10.dp, vertical = 6.dp),
     ) {
-        if (drawWall != null) {
-            val intActive = kotlin.math.abs(drawWall.thickness - interiorThicknessCM) < 0.1
-            val extActive = kotlin.math.abs(drawWall.thickness - exteriorThicknessCM) < 0.1
-            ContextChip(
-                label = "Interior ${UnitFormat.length(interiorThicknessCM, unitSystem)}",
-                active = intActive,
-                onClick = onInterior,
-            )
-            ContextChip(
-                label = "Exterior ${UnitFormat.length(exteriorThicknessCM, unitSystem)}",
-                active = extActive,
-                onClick = onExterior,
-            )
-        }
+        val intActive = kotlin.math.abs(drawWall.thickness - interiorThicknessCM) < 0.1
+        val extActive = kotlin.math.abs(drawWall.thickness - exteriorThicknessCM) < 0.1
+        ContextChip(
+            label = "Interior ${UnitFormat.length(interiorThicknessCM, unitSystem)}",
+            active = intActive,
+            onClick = onInterior,
+        )
+        ContextChip(
+            label = "Exterior ${UnitFormat.length(exteriorThicknessCM, unitSystem)}",
+            active = extActive,
+            onClick = onExterior,
+        )
         ContextChip(
             label = if (orthoLock) "Ortho 45°" else "Ortho free",
             active = orthoLock,
@@ -1878,6 +2135,7 @@ private fun ContextChip(
 @Composable
 private fun AddSheetContent(
     unitSystem: UnitSystem,
+    onDone: () -> Unit,
     onDrawWallInterior: () -> Unit,
     onDrawWallExterior: () -> Unit,
     onDrawRoom: () -> Unit,
@@ -1902,25 +2160,38 @@ private fun AddSheetContent(
             .padding(horizontal = 16.dp, vertical = 8.dp)
             .navigationBarsPadding(),
     ) {
-        Text(
-            "Add",
-            style = HdTheme.typography.titleLarge,
-            color = HdTheme.colors.architectInk,
-            modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp),
-        )
-        // iOS AddToolSheet sections: OPENINGS / FURNITURE / STRUCTURE / ANNOTATE (+ walls)
-        AddSectionHeader("WALLS")
-        AddListRow("Interior wall · $intLabel", HdSfIcons.plusSquare, onDrawWallInterior)
-        AddListRow("Exterior wall · $extLabel", HdSfIcons.plusSquare, onDrawWallExterior)
-        AddListRow("Room", HdSfIcons.rectangleSplit3x3, onDrawRoom)
+        Box(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+            Text(
+                "Add",
+                style = HdTheme.typography.titleLarge,
+                color = HdTheme.colors.architectInk,
+                modifier = Modifier.align(Alignment.Center),
+            )
+            Text(
+                "Done",
+                color = HdTheme.colors.architectInk,
+                fontFamily = HdSans,
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 15.sp,
+                modifier = Modifier
+                    .align(Alignment.CenterEnd)
+                    .clip(RoundedCornerShape(999.dp))
+                    .background(Color.Black.copy(alpha = 0.06f))
+                    .clickable(onClick = onDone)
+                    .padding(horizontal = 14.dp, vertical = 8.dp),
+            )
+        }
         AddSectionHeader("OPENINGS")
         AddListRow("Door", HdSfIcons.doorLeftHandOpen, onDoor)
         AddListRow("Window", HdSfIcons.windowVerticalClosed, onWindow)
-        AddListRow("French door", HdSfIcons.doorLeftHandOpen, onFrench)
+        AddListRow("French Door", HdSfIcons.doorLeftHandOpen, onFrench)
         AddSectionHeader("FURNITURE")
         AddListRow("Furniture…", HdSfIcons.sofa, onFurniture)
-        AddListRow("Custom furniture", HdSfIcons.rectangleDashed, onDrawFurnitureBox)
+        AddListRow("Draw furniture box", HdSfIcons.rectangleDashed, onDrawFurnitureBox)
         AddSectionHeader("STRUCTURE")
+        AddListRow("Rectangular room", HdSfIcons.rectangleSplit3x3, onDrawRoom)
+        AddListRow("Interior wall · $intLabel", HdSfIcons.plusSquare, onDrawWallInterior)
+        AddListRow("Exterior wall · $extLabel", HdSfIcons.plusSquare, onDrawWallExterior)
         AddListRow("Round pillar", HdSfIcons.cylinder) {
             onPlaceStructure(StructureCatalog.pillarRoundID)
         }
@@ -2022,74 +2293,92 @@ private fun DockItem(
     disabled: Boolean = false,
     content: @Composable () -> Unit,
 ) {
-    // iOS EditorDock.dockButton — 40×30 r9 tile, mono 8 label, minWidth 42
+    val fg = if (active || ink) Color.White else HdTheme.colors.architectInk
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier
-            .widthIn(min = 42.dp)
-            .width(48.dp)
+            .widthIn(min = 47.dp)
+            .width(50.dp)
             .alpha(if (disabled) 0.35f else 1f)
-            .clickable(enabled = !disabled, onClick = onClick)
-            .padding(vertical = 2.dp),
+            .clickable(enabled = !disabled, onClick = onClick),
     ) {
         Box(
-            modifier = Modifier.size(width = 40.dp, height = 30.dp),
+            modifier = Modifier
+                .height(50.dp)
+                .fillMaxWidth()
+                .then(
+                    if (active) {
+                        Modifier.shadow(
+                            elevation = 8.dp,
+                            shape = RoundedCornerShape(13.dp),
+                            ambientColor = HdTheme.colors.selection.copy(alpha = 0.45f),
+                            spotColor = HdTheme.colors.selection.copy(alpha = 0.45f),
+                        )
+                    } else {
+                        Modifier
+                    },
+                )
+                .clip(RoundedCornerShape(13.dp))
+                .background(
+                    if (active) {
+                        Brush.linearGradient(
+                            listOf(HdTheme.colors.selection, Color(0xFF2D74BC)),
+                        )
+                    } else if (ink) {
+                        Brush.linearGradient(
+                            listOf(HdTheme.colors.architectInk, HdTheme.colors.architectInk),
+                        )
+                    } else {
+                        Brush.linearGradient(
+                            listOf(Color.Transparent, Color.Transparent),
+                        )
+                    },
+                )
+                .padding(vertical = 6.dp),
             contentAlignment = Alignment.Center,
         ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.Center,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .clip(RoundedCornerShape(9.dp))
-                    .background(
-                        when {
-                            ink -> HdTheme.colors.architectInk
-                            active -> HdTheme.colors.selection
-                            else -> Color.Transparent
-                        },
-                    ),
-            ) {
-                content()
-                if (chevron) {
-                    SfIcon(
-                        HdSfIcons.chevronDown,
-                        contentDescription = null,
-                        tint = if (ink || active) HdTheme.colors.paper else HdTheme.colors.architectInk,
-                        size = 8.dp,
-                    )
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center,
+                ) {
+                    content()
+                    if (chevron) {
+                        SfIcon(
+                            HdSfIcons.chevronDown,
+                            contentDescription = null,
+                            tint = fg,
+                            size = 8.dp,
+                        )
+                    }
                 }
+                Text(
+                    text = label,
+                    color = fg,
+                    fontFamily = HdSans,
+                    fontWeight = FontWeight.Medium,
+                    fontSize = 9.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Clip,
+                )
             }
             if (badge != null) {
                 Text(
                     text = badge,
                     color = Color.White,
+                    fontFamily = HdMono,
                     fontSize = 7.sp,
-                    fontWeight = FontWeight.Bold,
+                    fontWeight = FontWeight.Medium,
+                    letterSpacing = 0.3.sp,
                     modifier = Modifier
                         .align(Alignment.TopEnd)
-                        .offset(x = 5.dp, y = (-3).dp)
+                        .offset(x = (-4).dp, y = 3.dp)
                         .clip(RoundedCornerShape(3.dp))
                         .background(HdTheme.colors.selection)
-                        .padding(horizontal = 3.dp, vertical = 1.dp),
+                        .padding(horizontal = 4.dp, vertical = 1.dp),
                 )
             }
         }
-        Spacer(Modifier.height(3.dp))
-        Text(
-            text = label,
-            color = if (active || ink) HdTheme.colors.architectInk else HdTheme.colors.architectGray,
-            fontFamily = HdMono,
-            fontSize = 8.sp,
-            lineHeight = 10.sp,
-            maxLines = 1,
-            softWrap = false,
-            overflow = TextOverflow.Clip,
-            textAlign = TextAlign.Center,
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(12.dp),
-        )
     }
 }
 
@@ -2143,16 +2432,27 @@ private fun PlanToolRail(
     selection: Selection,
     orthoLock: Boolean,
     drawWallActive: Boolean,
+    additiveSelect: Boolean,
     onFlipHinge: () -> Unit,
     onFlipSwing: () -> Unit,
     onWallStyle: () -> Unit,
+    onMatchProps: () -> Unit,
     onFit: () -> Unit,
     onToggleOrtho: () -> Unit,
     onToggleDrawWall: () -> Unit,
+    onToggleAdditive: () -> Unit,
+    onDetectRooms: () -> Unit,
+    onMirrorLR: () -> Unit,
+    onMirrorTB: () -> Unit,
+    onRotateCW: () -> Unit,
+    onRotateCCW: () -> Unit,
+    onAddExteriorDims: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val openingSelected = selection is Selection.Opening || selection is Selection.OpeningHandle
     val wallSelected = selection is Selection.Wall || selection is Selection.Endpoint
+    var viewMenu by remember { mutableStateOf(false) }
+    var planMenu by remember { mutableStateOf(false) }
     Column(
         verticalArrangement = Arrangement.spacedBy(8.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -2173,14 +2473,42 @@ private fun PlanToolRail(
         if (wallSelected) {
             RailCircleButton(
                 icon = HdSfIcons.paintbrushFill,
-                contentDescription = "Wall style / format painter",
+                contentDescription = "Wall style",
                 onClick = onWallStyle,
             )
+            RailCircleButton(
+                icon = HdSfIcons.paintbrushPointed,
+                contentDescription = "Match wall properties",
+                onClick = onMatchProps,
+            )
+        }
+        Box {
+            RailCircleButton(
+                icon = HdSfIcons.eye,
+                contentDescription = "View options",
+                onClick = { viewMenu = true },
+            )
+            DropdownMenu(expanded = viewMenu, onDismissRequest = { viewMenu = false }) {
+                DropdownMenuItem(
+                    text = { Text("Add exterior dimensions") },
+                    onClick = {
+                        viewMenu = false
+                        onAddExteriorDims()
+                    },
+                )
+            }
         }
         RailCircleButton(
-            icon = HdSfIcons.viewfinder,
-            contentDescription = "Fit plan",
-            onClick = onFit,
+            icon = if (drawWallActive) HdSfIcons.plusSquareFill else HdSfIcons.plusSquare,
+            contentDescription = "Draw wall",
+            active = drawWallActive,
+            onClick = onToggleDrawWall,
+        )
+        RailCircleButton(
+            icon = HdSfIcons.lasso,
+            contentDescription = "Select multiple",
+            active = additiveSelect,
+            onClick = onToggleAdditive,
         )
         RailCircleButton(
             icon = if (orthoLock) {
@@ -2192,11 +2520,54 @@ private fun PlanToolRail(
             active = orthoLock,
             onClick = onToggleOrtho,
         )
+        Box {
+            RailCircleButton(
+                icon = HdSfIcons.wandAndRays,
+                contentDescription = "Plan tools",
+                onClick = { planMenu = true },
+            )
+            DropdownMenu(expanded = planMenu, onDismissRequest = { planMenu = false }) {
+                DropdownMenuItem(
+                    text = { Text("Detect rooms from walls") },
+                    onClick = {
+                        planMenu = false
+                        onDetectRooms()
+                    },
+                )
+                DropdownMenuItem(
+                    text = { Text("90° clockwise") },
+                    onClick = {
+                        planMenu = false
+                        onRotateCW()
+                    },
+                )
+                DropdownMenuItem(
+                    text = { Text("90° counter-clockwise") },
+                    onClick = {
+                        planMenu = false
+                        onRotateCCW()
+                    },
+                )
+                DropdownMenuItem(
+                    text = { Text("Flip top ⇄ bottom") },
+                    onClick = {
+                        planMenu = false
+                        onMirrorTB()
+                    },
+                )
+                DropdownMenuItem(
+                    text = { Text("Flip left ⇄ right") },
+                    onClick = {
+                        planMenu = false
+                        onMirrorLR()
+                    },
+                )
+            }
+        }
         RailCircleButton(
-            icon = if (drawWallActive) HdSfIcons.plusSquareFill else HdSfIcons.plusSquare,
-            contentDescription = "Draw wall",
-            active = drawWallActive,
-            onClick = onToggleDrawWall,
+            icon = HdSfIcons.viewfinder,
+            contentDescription = "Fit plan",
+            onClick = onFit,
         )
     }
 }

@@ -2,10 +2,12 @@ package com.homedesign.android.presentation.editor
 
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.FilterChip
@@ -17,10 +19,25 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.homedesign.android.core.ui.HdSfIcons
 import com.homedesign.android.core.ui.SfIcon
+import com.homedesign.android.core.ui.theme.HdMono
+import com.homedesign.android.core.ui.theme.HdSans
 import com.homedesign.android.core.ui.theme.HdTheme
 import com.homedesign.android.domain.geom.AlignEdge
 import com.homedesign.android.domain.geom.ArcWallGeometry
@@ -97,6 +114,8 @@ fun PropertySheetContent(
     onMirrorFurniture: (PlanAxis) -> Unit = {},
     onDimensionLength: (Double) -> Unit = {},
     compact: Boolean = false,
+    measureMode: Boolean = false,
+    onOpenAr: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val home = state.home
@@ -132,7 +151,7 @@ fun PropertySheetContent(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(if (compact) 8.dp else 12.dp),
     ) {
-        if (!compact) {
+        if (!compact && furniture == null && multi == null) {
             Text("Properties", style = HdTheme.typography.titleLarge, color = HdTheme.colors.ink)
         }
 
@@ -209,6 +228,7 @@ fun PropertySheetContent(
                 piece = furniture,
                 unitSystem = unitSystem,
                 hasClipboard = state.hasClipboard,
+                measureMode = measureMode,
                 onRename = onRename,
                 onFurnitureWidth = onFurnitureWidth,
                 onFurnitureDepth = onFurnitureDepth,
@@ -219,6 +239,7 @@ fun PropertySheetContent(
                 onDuplicate = onDuplicateFurniture,
                 onReplace = onReplaceFurniture,
                 onDelete = onDelete,
+                onOpenAr = onOpenAr,
             )
             dimension != null -> DimensionPropertyBody(
                 dim = dimension,
@@ -383,7 +404,7 @@ private fun WallPropertyBody(
         if (finishSide == "right") wall.rightSideBaseboard else wall.leftSideBaseboard
     val curveDeg = ((wall.arcExtent ?: 0.0) * 180.0 / kotlin.math.PI).roundToInt()
 
-    Text("Wall", style = HdTheme.typography.titleMedium, color = HdTheme.colors.ink)
+    InspectorEyebrow(kind = "STYLE", title = "Wall")
     NumberRow(
         label = "Length",
         valueCm = lengthCm,
@@ -442,19 +463,18 @@ private fun WallPropertyBody(
     TextButton(onClick = onAddCurvePoint) { Text("Add curve point") }
     TextButton(onClick = onAddWallDimension) { Text("Add dimension") }
 
-    Text("Finish", style = HdTheme.typography.labelMedium, color = HdTheme.colors.stone)
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        FilterChip(
-            selected = finishSide == "left",
-            onClick = { finishSide = "left" },
-            label = { Text("Left") },
-        )
-        FilterChip(
-            selected = finishSide == "right",
-            onClick = { finishSide = "right" },
-            label = { Text("Right") },
-        )
-    }
+    Text(
+        "SURFACE · PER SIDE",
+        fontFamily = HdMono,
+        fontSize = 9.5.sp,
+        letterSpacing = 1.6.sp,
+        color = HdTheme.colors.architectGray,
+    )
+    CapsuleRow(
+        items = listOf("Left", "Right"),
+        active = if (finishSide == "right") "Right" else "Left",
+        onSelect = { finishSide = if (it == "Right") "right" else "left" },
+    )
     Text("Paint", style = HdTheme.typography.labelSmall, color = HdTheme.colors.stone)
     PaintRow(
         selectedHex = sideColor,
@@ -547,6 +567,7 @@ private fun RoomPropertyBody(
     onStageRoom: () -> Unit,
     onDelete: () -> Unit,
 ) {
+    InspectorEyebrow(kind = "STYLE", title = room.name?.takeIf { it.isNotBlank() } ?: "Room")
     var name by remember(room.id, room.name) { mutableStateOf(room.name.orEmpty()) }
     val areaM2 = RoomGeometry.polygonArea(room) / 10_000.0
     val size = RoomSizeMutation.boundingSize(room)
@@ -703,10 +724,9 @@ private fun OpeningPropertyBody(
     onDuplicate: () -> Unit,
     onDelete: () -> Unit,
 ) {
-    Text(
-        opening.piece.name?.trim()?.ifBlank { null } ?: "Opening",
-        style = HdTheme.typography.titleMedium,
-        color = HdTheme.colors.ink,
+    InspectorEyebrow(
+        kind = "OPENING",
+        title = opening.piece.name?.trim()?.ifBlank { null } ?: "Opening",
     )
     NumberRow(
         label = "Width",
@@ -737,6 +757,7 @@ private fun FurniturePropertyBody(
     piece: com.homedesign.android.domain.model.HomePieceOfFurniture,
     unitSystem: UnitSystem,
     hasClipboard: Boolean,
+    measureMode: Boolean = false,
     onRename: (String) -> Unit,
     onFurnitureWidth: (Double) -> Unit,
     onFurnitureDepth: (Double) -> Unit,
@@ -747,9 +768,67 @@ private fun FurniturePropertyBody(
     onDuplicate: () -> Unit,
     onReplace: () -> Unit,
     onDelete: () -> Unit,
+    onOpenAr: () -> Unit = {},
 ) {
     var name by remember(piece.id, piece.name) { mutableStateOf(piece.name.orEmpty()) }
     val deg = round(piece.angle * 180.0 / kotlin.math.PI)
+    // iOS EditorProChrome: MEASURE (selection blue) vs SELECTION (stone) eyebrow.
+    Text(
+        text = if (measureMode) "MEASURE" else "SELECTION",
+        style = HdTheme.typography.labelSmall.copy(
+            fontFamily = HdMono,
+            fontSize = 10.sp,
+            fontWeight = FontWeight.Medium,
+            letterSpacing = 1.2.sp,
+        ),
+        color = if (measureMode) HdTheme.colors.selection else HdTheme.colors.stone,
+    )
+    if (measureMode) {
+        Text(
+            text = name.ifBlank { "Furniture" },
+            style = HdTheme.typography.titleMedium,
+            color = HdTheme.colors.architectInk,
+        )
+        Text(
+            "DIMENSIONS",
+            style = HdTheme.typography.labelSmall.copy(
+                fontFamily = HdMono,
+                fontSize = 10.sp,
+                letterSpacing = 1.2.sp,
+            ),
+            color = HdTheme.colors.stone,
+        )
+        NumberRow(
+            label = "Width",
+            valueCm = piece.width,
+            onChangeCm = onFurnitureWidth,
+            minCm = 1.0,
+            maxCm = 10_000.0,
+            unit = unitSystem,
+        )
+        NumberRow(
+            label = "Depth",
+            valueCm = piece.depth,
+            onChangeCm = onFurnitureDepth,
+            minCm = 1.0,
+            maxCm = 10_000.0,
+            unit = unitSystem,
+        )
+        NumberRow(
+            label = "Height",
+            valueCm = piece.height,
+            onChangeCm = {},
+            minCm = 1.0,
+            maxCm = 10_000.0,
+            unit = unitSystem,
+        )
+        Text(
+            "Switch to Edit to change size, material, or delete.",
+            style = HdTheme.typography.bodySmall,
+            color = HdTheme.colors.stone,
+        )
+        return
+    }
     OutlinedTextField(
         value = name,
         onValueChange = {
@@ -759,6 +838,15 @@ private fun FurniturePropertyBody(
         label = { Text("Name") },
         modifier = Modifier.fillMaxWidth(),
         singleLine = true,
+    )
+    Text(
+        "MEASURE",
+        style = HdTheme.typography.labelSmall.copy(
+            fontFamily = HdMono,
+            fontSize = 10.sp,
+            letterSpacing = 1.2.sp,
+        ),
+        color = HdTheme.colors.selection,
     )
     NumberRow(
         label = "Width",
@@ -796,7 +884,111 @@ private fun FurniturePropertyBody(
         TextButton(onClick = onPaste, enabled = hasClipboard) { Text("Paste") }
     }
     TextButton(onClick = onReplace) { Text("Replace with…") }
-    DeleteRow(onDelete)
+    Text(
+        "MATERIALS",
+        fontFamily = HdMono,
+        fontSize = 9.5.sp,
+        letterSpacing = 1.6.sp,
+        color = HdTheme.colors.architectGray,
+    )
+    PaintRow(selectedHex = piece.color, onPick = { /* color via replace/style later */ })
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(44.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(Color.White)
+            .border(0.5.dp, HdTheme.colors.hairline, RoundedCornerShape(12.dp))
+            .clickable(onClick = onOpenAr),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            "View in your room (AR)",
+            fontFamily = HdSans,
+            fontWeight = FontWeight.Medium,
+            fontSize = 14.sp,
+            color = HdTheme.colors.selection,
+        )
+    }
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .height(44.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(Color.White)
+                .border(0.5.dp, HdTheme.colors.hairline, RoundedCornerShape(12.dp))
+                .clickable(onClick = onDuplicate),
+            contentAlignment = Alignment.Center,
+        ) { Text("Duplicate", fontFamily = HdSans, fontWeight = FontWeight.Medium) }
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .height(44.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(HdTheme.colors.destructive.copy(alpha = 0.08f))
+                .clickable(onClick = onDelete),
+            contentAlignment = Alignment.Center,
+        ) { Text("Delete", color = HdTheme.colors.destructive, fontFamily = HdSans, fontWeight = FontWeight.Medium) }
+    }
+}
+
+@Composable
+private fun InspectorEyebrow(kind: String, title: String) {
+    Text(
+        kind,
+        fontFamily = HdMono,
+        fontSize = 9.sp,
+        letterSpacing = 1.6.sp,
+        color = HdTheme.colors.architectGray,
+    )
+    Text(
+        title,
+        fontFamily = HdSans,
+        fontWeight = FontWeight.SemiBold,
+        fontSize = 16.sp,
+        color = HdTheme.colors.architectInk,
+    )
+}
+
+@Composable
+private fun CapsuleRow(
+    items: List<String>,
+    active: String,
+    onSelect: (String) -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(11.dp))
+            .background(Color.Black.copy(alpha = 0.05f))
+            .padding(3.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        items.forEach { item ->
+            val on = item == active
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .height(32.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(if (on) Color.White else Color.Transparent)
+                    .clickable { onSelect(item) },
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    item,
+                    fontFamily = HdSans,
+                    fontSize = 12.sp,
+                    fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal,
+                    color = if (on) HdTheme.colors.architectInk else HdTheme.colors.architectGray,
+                )
+            }
+        }
+    }
 }
 
 @Composable

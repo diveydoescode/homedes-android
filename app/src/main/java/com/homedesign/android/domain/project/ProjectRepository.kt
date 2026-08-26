@@ -65,6 +65,9 @@ interface ProjectRepository {
     suspend fun rename(id: String, name: String)
     suspend fun delete(id: String)
     suspend fun touch(id: String)
+
+    /** Re-render stored JPEG thumbs from current archives (plan fill/hatch updates). */
+    suspend fun refreshThumbnails()
 }
 
 /** Σ room-polygon areas (shoelace), cm² → m². */
