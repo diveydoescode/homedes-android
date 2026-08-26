@@ -82,6 +82,10 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.homedesign.android.core.ui.hdGlassCapsule
+import com.homedesign.android.core.ui.hdGlassChrome
+import com.homedesign.android.core.ui.hdLayerBackdrop
+import com.homedesign.android.core.ui.rememberHdLayerBackdrop
 import com.homedesign.android.core.ui.theme.HdTheme
 import com.homedesign.android.domain.catalog.catalogById
 import com.homedesign.android.domain.geom.LevelMutation
@@ -263,6 +267,8 @@ fun EditorScreen(
         val placeTool = state.tool as? EditorTool.PlaceFurniture
         val showPlanChrome = state.viewMode == EditorViewMode.Plan2D ||
             state.viewMode == EditorViewMode.Split
+        // Kyant Backdrop — canvas is the layer; chrome draws glass over it.
+        val glassBackdrop = rememberHdLayerBackdrop(HdTheme.colors.paper)
 
         LaunchedEffect(splitAvailable, state.viewMode) {
             if (!splitAvailable && state.viewMode == EditorViewMode.Split) {
@@ -280,7 +286,9 @@ fun EditorScreen(
                         Plan3DCameraMode.Orbit
                     },
                     onBackToPlan = { viewModel.setViewMode(EditorViewMode.Plan2D) },
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .hdLayerBackdrop(glassBackdrop),
                 )
             }
             EditorViewMode.AR -> {
@@ -290,13 +298,16 @@ fun EditorScreen(
                     soloFurnitureId = soloFurnitureId,
                     onBackToPlan = { viewModel.setViewMode(EditorViewMode.Plan2D) },
                     onOpenWalk = { viewModel.setViewMode(EditorViewMode.Walk) },
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .hdLayerBackdrop(glassBackdrop),
                 )
             }
             EditorViewMode.Split -> {
                 Row(
                     Modifier
                         .fillMaxSize()
+                        .hdLayerBackdrop(glassBackdrop)
                         .padding(
                             top = TopChromeClearance,
                             bottom = 100.dp,
@@ -397,6 +408,7 @@ fun EditorScreen(
                 onDimensionEditCommit = viewModel::commitDimensionEdit,
                 modifier = Modifier
                     .fillMaxSize()
+                    .hdLayerBackdrop(glassBackdrop)
                     .padding(
                         top = TopChromeClearance,
                         bottom = 100.dp,
@@ -421,9 +433,11 @@ fun EditorScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(20.dp))
-                    .background(HdTheme.colors.ivory.copy(alpha = 0.92f))
-                    .border(1.dp, HdTheme.colors.hairline, RoundedCornerShape(20.dp))
+                    .hdGlassChrome(
+                        backdrop = glassBackdrop,
+                        shape = RoundedCornerShape(20.dp),
+                        fallbackFill = HdTheme.colors.ivory.copy(alpha = 0.92f),
+                    )
                     .padding(horizontal = 4.dp, vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -586,9 +600,11 @@ fun EditorScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(HdTheme.colors.ivory.copy(alpha = 0.92f))
-                    .border(1.dp, HdTheme.colors.hairline, RoundedCornerShape(16.dp))
+                    .hdGlassChrome(
+                        backdrop = glassBackdrop,
+                        shape = RoundedCornerShape(16.dp),
+                        fallbackFill = HdTheme.colors.ivory.copy(alpha = 0.92f),
+                    )
                     .padding(horizontal = 8.dp, vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -640,9 +656,10 @@ fun EditorScreen(
                 .align(Alignment.BottomCenter)
                 .navigationBarsPadding()
                 .padding(bottom = 16.dp)
-                .clip(RoundedCornerShape(999.dp))
-                .background(HdTheme.colors.ivory.copy(alpha = 0.94f))
-                .border(1.dp, HdTheme.colors.hairline, RoundedCornerShape(999.dp))
+                .hdGlassCapsule(
+                    backdrop = glassBackdrop,
+                    fallbackFill = HdTheme.colors.ivory.copy(alpha = 0.94f),
+                )
                 .padding(horizontal = 10.dp, vertical = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(4.dp),
             verticalAlignment = Alignment.CenterVertically,
