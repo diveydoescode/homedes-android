@@ -605,8 +605,16 @@ fun PlanCanvas(
                 )
             }
         }
+        // iOS PlanCanvasView: grid covers the visible viewport in plan-cm
+        // (visiblePlanBounds), so panning never runs off the end of the paper.
         val gridStep = chooseGridStep(scale)
-        drawGrid(hairline, gridStep, bounds) { x, y -> planToScreen(x, y, scale) }
+        val visiblePlan = visiblePlanBounds(
+            viewportW = viewportW,
+            viewportH = viewportH,
+            scale = scale,
+            screenToPlan = { ox, oy -> screenToPlan(Offset(ox, oy), scale) },
+        )
+        drawGrid(hairline, gridStep, visiblePlan) { x, y -> planToScreen(x, y, scale) }
 
         // Ghost inactive storeys (rooms + wall footprints only — not hit-testable).
         if (ghostOtherLevels && level != null) {
@@ -1643,21 +1651,65 @@ private fun chooseGridStep(scalePxPerCm: Float): Double {
     return snapGridDefaultCM
 }
 
+/**
+ * Plan-cm AABB of the screen rect — same idea as iOS
+ * `PlanViewTransform.visiblePlanBounds()`. Grid generation iterates
+ * only this region so deep pan/zoom stays infinite without drawing
+ * the whole (infinite) plane.
+ */
+private fun visiblePlanBounds(
+    viewportW: Float,
+    viewportH: Float,
+    scale: Float,
+    screenToPlan: (Float, Float) -> Vec2,
+): PlanBounds {
+    if (viewportW <= 1f || viewportH <= 1f || scale <= 0f) {
+        return PlanBounds(0.0, 0.0, 1000.0, 1000.0)
+    }
+    val corners = listOf(
+        screenToPlan(0f, 0f),
+        screenToPlan(viewportW, 0f),
+        screenToPlan(0f, viewportH),
+        screenToPlan(viewportW, viewportH),
+    )
+    var minX = corners[0].x
+    var minY = corners[0].y
+    var maxX = corners[0].x
+    var maxY = corners[0].y
+    for (i in 1 until corners.size) {
+        val p = corners[i]
+        minX = min(minX, p.x)
+        minY = min(minY, p.y)
+        maxX = max(maxX, p.x)
+        maxY = max(maxY, p.y)
+    }
+    // One grid cell of slack so edges never flash empty while panning.
+    val pad = chooseGridStep(scale)
+    return PlanBounds(minX - pad, minY - pad, maxX + pad, maxY + pad)
+}
+
 private fun DrawScope.drawGrid(
     hairline: Color,
     gridStep: Double,
     bounds: PlanBounds,
     planToScreen: (Double, Double) -> Offset,
 ) {
-    val pad = 2000.0
-    val minX = bounds.minX - pad
-    val maxX = bounds.maxX + pad
-    val minY = bounds.minY - pad
-    val maxY = bounds.maxY + pad
+    val minX = bounds.minX
+    val maxX = bounds.maxX
+    val minY = bounds.minY
+    val maxY = bounds.maxY
+    if (!(minX < maxX && minY < maxY) || gridStep <= 0.0) return
+    // Cap line count so pathological zooms cannot freeze the UI.
+    val maxLines = 400
+    val xCount = ((maxX - minX) / gridStep).toInt()
+    val yCount = ((maxY - minY) / gridStep).toInt()
+    if (xCount > maxLines || yCount > maxLines) return
+
     val startX = kotlin.math.floor(minX / gridStep) * gridStep
     val startY = kotlin.math.floor(minY / gridStep) * gridStep
     var x = startX
-    while (x <= maxX) {
+    var drawn = 0
+    while (x <= maxX && drawn < maxLines) {
         val a = planToScreen(x, minY)
         val b = planToScreen(x, maxY)
         val major = abs(x % 100.0) < 1e-6
@@ -1668,9 +1720,11 @@ private fun DrawScope.drawGrid(
             strokeWidth = if (major) 1.25f else 1f,
         )
         x += gridStep
+        drawn++
     }
     var y = startY
-    while (y <= maxY) {
+    drawn = 0
+    while (y <= maxY && drawn < maxLines) {
         val a = planToScreen(minX, y)
         val b = planToScreen(maxX, y)
         val major = abs(y % 100.0) < 1e-6
@@ -1681,5 +1735,6 @@ private fun DrawScope.drawGrid(
             strokeWidth = if (major) 1.25f else 1f,
         )
         y += gridStep
+        drawn++
     }
 }
