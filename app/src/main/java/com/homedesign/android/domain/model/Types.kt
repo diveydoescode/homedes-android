@@ -307,7 +307,3 @@ data class ProjectMeta(
     val updatedAt: String,
 )
 
-data class PlanClipboardPayload(
-    val pieces: List<HomePieceOfFurniture>,
-    val openings: List<HomeDoorOrWindow>,
-)

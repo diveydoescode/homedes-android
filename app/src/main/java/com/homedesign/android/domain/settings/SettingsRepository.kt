@@ -20,6 +20,8 @@ data class UserSettings(
     val lastProjectId: String? = null,
     /** True when the editor had unsaved edits at last process pause. */
     val editorSessionDirty: Boolean = false,
+    /** Constrain wall draws / endpoint drags to 8 principal rays (iOS AppStorage). */
+    val orthoLock: Boolean = true,
 ) {
     /** Legacy helper — true for mm or cm. */
     val useMetric: Boolean get() = unitSystem != UnitSystem.Imperial
@@ -43,4 +45,5 @@ interface SettingsRepository {
     suspend fun setLastProjectId(projectId: String?)
     suspend fun setEditorSessionDirty(dirty: Boolean)
     suspend fun clearEditorSession()
+    suspend fun setOrthoLock(enabled: Boolean)
 }

@@ -141,6 +141,7 @@ fun EditorScreen(
     var showCatalog by remember { mutableStateOf(false) }
     var catalogReplaceMode by remember { mutableStateOf(false) }
     var labelDraft by remember { mutableStateOf("") }
+    var furnitureBoxDraft by remember { mutableStateOf("") }
     /** null = floor; "left"/"right" = wall side finish. */
     var pendingTextureImport by remember { mutableStateOf<String?>(null) }
     val snackbar = remember { SnackbarHostState() }
@@ -345,6 +346,8 @@ fun EditorScreen(
                         },
                         onDrawRoomDrag = viewModel::onDrawRoomDrag,
                         onDrawRoomCommit = viewModel::onDrawRoomCommit,
+                        onDrawFurnitureBoxDrag = viewModel::onDrawFurnitureBoxDrag,
+                        onDrawFurnitureBoxCommit = viewModel::onDrawFurnitureBoxCommit,
                         onCancelPreview = viewModel::cancelPreview,
                         tryBeginOpeningDrag = viewModel::tryBeginOpeningDrag,
                         onOpeningDrag = viewModel::updateOpeningDrag,
@@ -356,9 +359,14 @@ fun EditorScreen(
                         onFurnitureRotatePreview = viewModel::onFurnitureRotatePreview,
                         onFurnitureMoveCommit = viewModel::commitFurnitureMoveGesture,
                         onFurnitureRotateCommit = viewModel::commitFurnitureRotateGesture,
+                        onWallEndpointPreview = viewModel::onWallEndpointPreview,
+                        onWallBodyPreview = viewModel::onWallBodyPreview,
+                        onWallEditCommit = viewModel::commitWallEditGesture,
                         onDimensionEndPreview = viewModel::onDimensionEndPreview,
                         onDimensionOffsetPreview = viewModel::onDimensionOffsetPreview,
                         onDimensionEditCommit = viewModel::commitDimensionEdit,
+                        onLabelMovePreview = viewModel::onLabelMovePreview,
+                        onLabelMoveCommit = viewModel::commitLabelMoveGesture,
                         modifier = mod,
                     )
                 }
@@ -419,6 +427,8 @@ fun EditorScreen(
                 },
                 onDrawRoomDrag = viewModel::onDrawRoomDrag,
                 onDrawRoomCommit = viewModel::onDrawRoomCommit,
+                onDrawFurnitureBoxDrag = viewModel::onDrawFurnitureBoxDrag,
+                onDrawFurnitureBoxCommit = viewModel::onDrawFurnitureBoxCommit,
                 onCancelPreview = viewModel::cancelPreview,
                 tryBeginOpeningDrag = viewModel::tryBeginOpeningDrag,
                 onOpeningDrag = viewModel::updateOpeningDrag,
@@ -430,9 +440,14 @@ fun EditorScreen(
                 onFurnitureRotatePreview = viewModel::onFurnitureRotatePreview,
                 onFurnitureMoveCommit = viewModel::commitFurnitureMoveGesture,
                 onFurnitureRotateCommit = viewModel::commitFurnitureRotateGesture,
+                onWallEndpointPreview = viewModel::onWallEndpointPreview,
+                onWallBodyPreview = viewModel::onWallBodyPreview,
+                onWallEditCommit = viewModel::commitWallEditGesture,
                 onDimensionEndPreview = viewModel::onDimensionEndPreview,
                 onDimensionOffsetPreview = viewModel::onDimensionOffsetPreview,
                 onDimensionEditCommit = viewModel::commitDimensionEdit,
+                onLabelMovePreview = viewModel::onLabelMovePreview,
+                onLabelMoveCommit = viewModel::commitLabelMoveGesture,
                 modifier = Modifier
                     .fillMaxSize()
                     .hdLayerBackdrop(glassBackdrop)
@@ -707,6 +722,17 @@ fun EditorScreen(
                     )
                 }
             }
+            DockItem(
+                label = "Ortho",
+                active = state.orthoLock,
+                onClick = viewModel::toggleOrthoLock,
+            ) {
+                Text(
+                    if (state.orthoLock) "45°" else "Free",
+                    color = if (state.orthoLock) HdTheme.colors.paper else HdTheme.colors.architectInk,
+                    style = HdTheme.typography.labelSmall,
+                )
+            }
             DockItem(label = "Add", ink = true, onClick = { showAdd = true }) {
                 Icon(
                     Icons.Outlined.Add,
@@ -811,6 +837,19 @@ fun EditorScreen(
             )
         }
 
+        if (showPlanChrome &&
+            state.tool is EditorTool.DrawFurnitureBox &&
+            state.pendingFurnitureBox == null
+        ) {
+            PlaceFurnitureBoxBanner(
+                onCancel = { viewModel.setTool(EditorTool.Select) },
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .statusBarsPadding()
+                    .padding(top = TopChromeClearance),
+            )
+        }
+
         if (showPlanChrome && state.tool is EditorTool.PlaceWalker) {
             PlaceWalkerBanner(
                 onCancel = { viewModel.setTool(EditorTool.Select) },
@@ -871,6 +910,7 @@ fun EditorScreen(
                             pendingTextureImport = side
                             pickUserTexture.launch("image/*")
                         },
+                        onAddWallDimension = viewModel::addDimensionForSelectedWall,
                         onFloorColor = viewModel::setFloorColor,
                         onFloorPreset = viewModel::setFloorPreset,
                         onClearFloorTexture = viewModel::clearFloorTexture,
@@ -952,6 +992,7 @@ fun EditorScreen(
                             pendingTextureImport = side
                             pickUserTexture.launch("image/*")
                         },
+                        onAddWallDimension = viewModel::addDimensionForSelectedWall,
                         onFloorColor = viewModel::setFloorColor,
                         onFloorPreset = viewModel::setFloorPreset,
                         onClearFloorTexture = viewModel::clearFloorTexture,
@@ -1023,6 +1064,10 @@ fun EditorScreen(
                 onDrawRoom = {
                     showAdd = false
                     viewModel.setTool(EditorTool.DrawRoom)
+                },
+                onDrawFurnitureBox = {
+                    showAdd = false
+                    viewModel.setTool(EditorTool.DrawFurnitureBox)
                 },
                 onDimension = {
                     showAdd = false
@@ -1098,6 +1143,43 @@ fun EditorScreen(
                     onClick = {
                         viewModel.cancelPlaceLabel()
                         labelDraft = ""
+                    },
+                ) { Text("Cancel") }
+            },
+        )
+    }
+
+    val pendingBox = state.pendingFurnitureBox
+    if (pendingBox != null) {
+        AlertDialog(
+            onDismissRequest = {
+                viewModel.cancelFurnitureBox()
+                furnitureBoxDraft = ""
+            },
+            title = { Text("Custom furniture", color = HdTheme.colors.ink) },
+            text = {
+                OutlinedTextField(
+                    value = furnitureBoxDraft,
+                    onValueChange = { furnitureBoxDraft = it },
+                    label = { Text("Name") },
+                    placeholder = { Text("Custom") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.confirmFurnitureBox(furnitureBoxDraft)
+                        furnitureBoxDraft = ""
+                    },
+                ) { Text("Add") }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.cancelFurnitureBox()
+                        furnitureBoxDraft = ""
                     },
                 ) { Text("Cancel") }
             },
@@ -1303,6 +1385,37 @@ private fun PlaceLabelBanner(
         )
         Text(
             text = "Done",
+            style = HdTheme.typography.labelSmall,
+            color = HdTheme.colors.selectionDeep,
+            modifier = Modifier
+                .clip(RoundedCornerShape(999.dp))
+                .clickable(onClick = onCancel)
+                .padding(horizontal = 8.dp, vertical = 6.dp),
+        )
+    }
+}
+
+@Composable
+private fun PlaceFurnitureBoxBanner(
+    onCancel: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier
+            .clip(RoundedCornerShape(999.dp))
+            .background(HdTheme.colors.ivory.copy(alpha = 0.94f))
+            .border(1.dp, HdTheme.colors.hairline, RoundedCornerShape(999.dp))
+            .padding(horizontal = 12.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text(
+            text = "Drag a box for custom furniture",
+            style = HdTheme.typography.labelMedium,
+            color = HdTheme.colors.architectInk,
+        )
+        Text(
+            text = "Cancel",
             style = HdTheme.typography.labelSmall,
             color = HdTheme.colors.selectionDeep,
             modifier = Modifier
@@ -1521,6 +1634,7 @@ private fun AddSheetContent(
     onDrawWallInterior: () -> Unit,
     onDrawWallExterior: () -> Unit,
     onDrawRoom: () -> Unit,
+    onDrawFurnitureBox: () -> Unit,
     onDimension: () -> Unit,
     onExteriorDims: () -> Unit,
     onDoor: () -> Unit,
@@ -1545,6 +1659,7 @@ private fun AddSheetContent(
         SheetRow("Interior wall · $intLabel", "Tap start, tap end; tap again to finish", onDrawWallInterior)
         SheetRow("Exterior wall · $extLabel", "Tap start, tap end; tap again to finish", onDrawWallExterior)
         SheetRow("Room", "Drag a rectangle", onDrawRoom)
+        SheetRow("Custom furniture", "Drag a box on the plan, then name it", onDrawFurnitureBox)
         SheetRow("Door", "Tap a wall to insert", onDoor)
         SheetRow("Window", "Tap a wall to insert", onWindow)
         SheetRow("French door", "Tap a wall to insert", onFrench)

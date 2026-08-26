@@ -52,6 +52,8 @@ class SettingsDataStore @Inject constructor(
         val editorTipDismissed = booleanPreferencesKey("editor_tip_dismissed")
         val lastProjectId = stringPreferencesKey("last_project_id")
         val editorSessionDirty = booleanPreferencesKey("editor_session_dirty")
+        /** iOS `hd.editing.orthoLock` — default ON when absent. */
+        val orthoLock = booleanPreferencesKey("ortho_lock")
     }
 
     override val settings: Flow<UserSettings> = store.data.map { prefs ->
@@ -149,6 +151,10 @@ class SettingsDataStore @Inject constructor(
         store.edit { prefs -> prefs[Keys.editorTipDismissed] = dismissed }
     }
 
+    override suspend fun setOrthoLock(enabled: Boolean) {
+        store.edit { prefs -> prefs[Keys.orthoLock] = enabled }
+    }
+
     override suspend fun setLastProjectId(projectId: String?) {
         store.edit { prefs ->
             if (projectId.isNullOrBlank()) prefs.remove(Keys.lastProjectId)
@@ -185,6 +191,7 @@ class SettingsDataStore @Inject constructor(
             editorTipDismissed = this[Keys.editorTipDismissed] ?: false,
             lastProjectId = this[Keys.lastProjectId],
             editorSessionDirty = this[Keys.editorSessionDirty] ?: false,
+            orthoLock = this[Keys.orthoLock] ?: true,
         )
     }
 

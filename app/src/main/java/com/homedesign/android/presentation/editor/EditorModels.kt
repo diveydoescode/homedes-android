@@ -13,6 +13,8 @@ sealed interface EditorTool {
     data object Select : EditorTool
     data class DrawWall(val thickness: Double = defaultWallThicknessCM) : EditorTool
     data object DrawRoom : EditorTool
+    /** Drag an AABB on the plan → custom HomePieceOfFurniture (iOS drawFurnitureBox). */
+    data object DrawFurnitureBox : EditorTool
     data object Dimension : EditorTool
     /** [stamp] true keeps PlaceFurniture after each tap (web stamp chip). */
     data class PlaceFurniture(val catalogId: String?, val stamp: Boolean = true) : EditorTool
@@ -24,6 +26,14 @@ sealed interface EditorTool {
     /** Next tap drops the walkthrough pegman and enters Walk. */
     data object PlaceWalker : EditorTool
 }
+
+/** Pending custom-furniture rect awaiting a name (plan cm). */
+data class PendingFurnitureBox(
+    val centerX: Double,
+    val centerY: Double,
+    val width: Double,
+    val depth: Double,
+)
 
 /**
  * First-person walk eye on the plan.
@@ -72,6 +82,8 @@ sealed interface DrawPreview {
         val guides: List<SnapGuideLine> = emptyList(),
     ) : DrawPreview
     data class Room(val from: Vec2, val to: Vec2) : DrawPreview
+    /** Live custom-furniture AABB while dragging. */
+    data class FurnitureBox(val from: Vec2, val to: Vec2) : DrawPreview
     data class Dimension(val start: Vec2, val end: Vec2?) : DrawPreview
     /** Live furniture drag (wall snap applied on commit). */
     data class FurnitureMove(
@@ -84,6 +96,12 @@ sealed interface DrawPreview {
     data class FurnitureRotate(val pieceId: String, val angle: Double) : DrawPreview
     /** Live wall bow (ephemeral walls while dragging the curve handle). */
     data class WallBow(val walls: List<com.homedesign.android.domain.model.Wall>) : DrawPreview
+    /** Live wall endpoint / body move (ephemeral walls + room vertex cascade). */
+    data class WallEdit(
+        val walls: List<com.homedesign.android.domain.model.Wall>,
+        val rooms: List<com.homedesign.android.domain.model.Room>,
+        val guides: List<SnapGuideLine> = emptyList(),
+    ) : DrawPreview
     /** Live dimension endpoint / offset drag. */
     data class DimensionEdit(
         val dimId: String,
@@ -92,6 +110,12 @@ sealed interface DrawPreview {
         val xEnd: Double,
         val yEnd: Double,
         val offset: Double,
+    ) : DrawPreview
+    /** Live plan-label drag. */
+    data class LabelMove(
+        val labelId: String,
+        val x: Double,
+        val y: Double,
     ) : DrawPreview
 }
 
@@ -136,6 +160,10 @@ data class EditorUiState(
     val cameraFocus: CameraFocusRequest? = null,
     /** Plan-cm point waiting for the New label dialog (PlaceLabel tool). */
     val pendingLabelPoint: Vec2? = null,
+    /** Custom furniture box awaiting a name after AABB drag. */
+    val pendingFurnitureBox: PendingFurnitureBox? = null,
+    /** Constrain wall draw / endpoint drag to 8 principal rays. */
+    val orthoLock: Boolean = true,
     /** Last pegman drop; Walk camera starts here when set. */
     val walkPose: WalkPose? = null,
 )

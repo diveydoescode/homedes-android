@@ -86,6 +86,17 @@ object ArcWallGeometry {
 
     fun isCurved(wall: Wall): Boolean = !isAllStraight(effectiveProfile(wall))
 
+    /**
+     * Single-span circular bulge for DXF polylines when [Wall.curveProfile] is null.
+     * Multi-span profiles return null so exporters sample the footprint instead.
+     */
+    fun singleBow(wall: Wall): Double? {
+        if (wall.curveProfile != null) return null
+        val extent = signedExtent(wall)
+        if (extent == 0.0) return null
+        return bowFromExtentLocal(extent)
+    }
+
     /** Inclusive sampled centreline. Straight → [start, end]. */
     fun centerline(wall: Wall): List<Vec2> {
         val (start, end) = chordOf(wall)

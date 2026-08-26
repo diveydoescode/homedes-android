@@ -97,6 +97,18 @@ private sealed interface SelectDragKind {
     data object Pan : SelectDragKind
     data object Opening : SelectDragKind
     data object BowHandle : SelectDragKind
+    data class WallEndpoint(
+        val wallId: String,
+        val atStart: Boolean,
+    ) : SelectDragKind
+    data class WallBody(
+        val wallId: String,
+        val startStartX: Double,
+        val startStartY: Double,
+        val startEndX: Double,
+        val startEndY: Double,
+        val startPlan: Vec2,
+    ) : SelectDragKind
     data class FurnitureMove(
         val pieceId: String,
         val startX: Double,
@@ -116,6 +128,12 @@ private sealed interface SelectDragKind {
     ) : SelectDragKind
     data class DimensionOffset(
         val dimId: String,
+    ) : SelectDragKind
+    data class LabelMove(
+        val labelId: String,
+        val startX: Double,
+        val startY: Double,
+        val startPlan: Vec2,
     ) : SelectDragKind
 }
 
@@ -146,6 +164,8 @@ fun PlanCanvas(
     onDrawWallCommit: (Vec2, Float) -> Unit,
     onDrawRoomDrag: (from: Vec2, to: Vec2) -> Unit,
     onDrawRoomCommit: (from: Vec2, to: Vec2) -> Unit,
+    onDrawFurnitureBoxDrag: (from: Vec2, to: Vec2) -> Unit = { _, _ -> },
+    onDrawFurnitureBoxCommit: (from: Vec2, to: Vec2) -> Unit = { _, _ -> },
     onCancelPreview: () -> Unit,
     tryBeginOpeningDrag: (plan: Vec2, scalePxPerCm: Float) -> Boolean = { _, _ -> false },
     onOpeningDrag: (plan: Vec2) -> Unit = {},
@@ -157,10 +177,16 @@ fun PlanCanvas(
     onFurnitureRotatePreview: (pieceId: String, angle: Double) -> Unit = { _, _ -> },
     onFurnitureMoveCommit: (pieceId: String, x: Double, y: Double) -> Unit = { _, _, _ -> },
     onFurnitureRotateCommit: (pieceId: String, angle: Double) -> Unit = { _, _ -> },
+    onWallEndpointPreview: (wallId: String, atStart: Boolean, x: Double, y: Double, scale: Float) -> Unit =
+        { _, _, _, _, _ -> },
+    onWallBodyPreview: (wallId: String, dx: Double, dy: Double) -> Unit = { _, _, _ -> },
+    onWallEditCommit: () -> Unit = {},
     onDimensionEndPreview: (dimId: String, atStart: Boolean, x: Double, y: Double) -> Unit =
         { _, _, _, _ -> },
     onDimensionOffsetPreview: (dimId: String, offset: Double) -> Unit = { _, _ -> },
     onDimensionEditCommit: () -> Unit = {},
+    onLabelMovePreview: (labelId: String, x: Double, y: Double) -> Unit = { _, _, _ -> },
+    onLabelMoveCommit: (labelId: String, x: Double, y: Double) -> Unit = { _, _, _ -> },
     modifier: Modifier = Modifier,
 ) {
     val paper = HdTheme.colors.paper
@@ -255,6 +281,7 @@ fun PlanCanvas(
                     var longPressFired = false
                     val downAtMs = System.currentTimeMillis()
                     val roomFrom = if (tool is EditorTool.DrawRoom) startPlan else null
+                    val boxFrom = if (tool is EditorTool.DrawFurnitureBox) startPlan else null
                     val slop = with(density) { 6.dp.toPx() }
 
                     var selectKind: SelectDragKind =
@@ -273,6 +300,10 @@ fun PlanCanvas(
                     var liveAngle = 0.0
                     when (val k = selectKind) {
                         is SelectDragKind.FurnitureMove -> {
+                            liveMoveX = k.startX
+                            liveMoveY = k.startY
+                        }
+                        is SelectDragKind.LabelMove -> {
                             liveMoveX = k.startX
                             liveMoveY = k.startY
                         }
@@ -335,6 +366,10 @@ fun PlanCanvas(
                                 dragged = true
                                 onDrawRoomDrag(roomFrom ?: startPlan, plan)
                             }
+                            tool is EditorTool.DrawFurnitureBox && pastSlop -> {
+                                dragged = true
+                                onDrawFurnitureBoxDrag(boxFrom ?: startPlan, plan)
+                            }
                             tool is EditorTool.Select && pastSlop -> {
                                 if (!dragged && selectKind is SelectDragKind.Pan) {
                                     when {
@@ -342,6 +377,14 @@ fun PlanCanvas(
                                             selectKind = SelectDragKind.BowHandle
                                         tryBeginOpeningDrag(startPlan, scaleAtStart) ->
                                             selectKind = SelectDragKind.Opening
+                                        else -> {
+                                            classifyWallBodyDrag(
+                                                startPlan = startPlan,
+                                                scale = scaleAtStart.toDouble(),
+                                                selection = selection,
+                                                home = home,
+                                            )?.let { selectKind = it }
+                                        }
                                     }
                                 }
                                 dragged = true
@@ -351,12 +394,33 @@ fun PlanCanvas(
                                         liveMoveY = k.startY + (plan.y - k.startPlan.y)
                                         onFurnitureMovePreview(k.pieceId, liveMoveX, liveMoveY)
                                     }
+                                    is SelectDragKind.LabelMove -> {
+                                        liveMoveX = k.startX + (plan.x - k.startPlan.x)
+                                        liveMoveY = k.startY + (plan.y - k.startPlan.y)
+                                        onLabelMovePreview(k.labelId, liveMoveX, liveMoveY)
+                                    }
                                     is SelectDragKind.FurnitureRotate -> {
                                         val cursor = atan2(plan.y - k.centerY, plan.x - k.centerX)
                                         liveAngle = snapFurnitureAngle(
                                             k.startAngle + (cursor - k.startCursorAngle),
                                         )
                                         onFurnitureRotatePreview(k.pieceId, liveAngle)
+                                    }
+                                    is SelectDragKind.WallEndpoint -> {
+                                        onWallEndpointPreview(
+                                            k.wallId,
+                                            k.atStart,
+                                            plan.x,
+                                            plan.y,
+                                            totalScale(),
+                                        )
+                                    }
+                                    is SelectDragKind.WallBody -> {
+                                        onWallBodyPreview(
+                                            k.wallId,
+                                            plan.x - k.startPlan.x,
+                                            plan.y - k.startPlan.y,
+                                        )
                                     }
                                     is SelectDragKind.DimensionEnd -> {
                                         onDimensionEndPreview(k.dimId, k.atStart, plan.x, plan.y)
@@ -397,7 +461,10 @@ fun PlanCanvas(
                     if (pinched) {
                         if (selectKind is SelectDragKind.FurnitureMove ||
                             selectKind is SelectDragKind.FurnitureRotate ||
+                            selectKind is SelectDragKind.LabelMove ||
                             selectKind is SelectDragKind.BowHandle ||
+                            selectKind is SelectDragKind.WallEndpoint ||
+                            selectKind is SelectDragKind.WallBody ||
                             selectKind is SelectDragKind.DimensionEnd ||
                             selectKind is SelectDragKind.DimensionOffset
                         ) {
@@ -425,6 +492,19 @@ fun PlanCanvas(
                             if (dragPx >= minDragToCommitBoxPx) onDrawRoomCommit(from, endPlan)
                             else onCancelPreview()
                         }
+                        EditorTool.DrawFurnitureBox -> {
+                            val from = boxFrom ?: startPlan
+                            val dragPx = hypot(
+                                (endPlan.x - from.x) * totalScale(),
+                                (endPlan.y - from.y) * totalScale(),
+                            )
+                            // Sub-threshold drag / tap exits the tool (iOS escape hatch).
+                            if (dragPx >= minDragToCommitBoxPx) {
+                                onDrawFurnitureBoxCommit(from, endPlan)
+                            } else {
+                                onDrawFurnitureBoxCommit(from, from)
+                            }
+                        }
                         is EditorTool.FormatPainter -> {
                             if (!dragged) onTap(startPlan, totalScale(), false)
                         }
@@ -437,12 +517,25 @@ fun PlanCanvas(
                                         onTap(startPlan, totalScale(), additiveSelect)
                                     }
                                 }
+                                is SelectDragKind.LabelMove -> {
+                                    if (dragged) {
+                                        onLabelMoveCommit(k.labelId, liveMoveX, liveMoveY)
+                                    } else {
+                                        onTap(startPlan, totalScale(), additiveSelect)
+                                    }
+                                }
                                 is SelectDragKind.FurnitureRotate -> {
                                     if (dragged) {
                                         onFurnitureRotateCommit(k.pieceId, liveAngle)
                                     } else {
                                         onTap(startPlan, totalScale(), additiveSelect)
                                     }
+                                }
+                                is SelectDragKind.WallEndpoint,
+                                is SelectDragKind.WallBody,
+                                -> {
+                                    if (dragged) onWallEditCommit()
+                                    else onTap(startPlan, totalScale(), additiveSelect)
                                 }
                                 is SelectDragKind.DimensionEnd,
                                 is SelectDragKind.DimensionOffset,
@@ -537,9 +630,13 @@ fun PlanCanvas(
         val baseWalls = home.walls.filter { level == null || it.level == level }
         val walls = when (val p = preview) {
             is DrawPreview.WallBow -> p.walls.filter { level == null || it.level == level }
+            is DrawPreview.WallEdit -> p.walls.filter { level == null || it.level == level }
             else -> baseWalls
         }
-        val rooms = home.rooms.filter { level == null || it.level == level }
+        val rooms = when (val p = preview) {
+            is DrawPreview.WallEdit -> p.rooms.filter { level == null || it.level == level }
+            else -> home.rooms.filter { level == null || it.level == level }
+        }
         val furniture = home.furniture.filter { it.visible && (level == null || it.level == level) }
         val openings = home.doorsAndWindows.filter { level == null || it.piece.level == level }
         val dims = home.dimensionLines.filter { level == null || it.level == level }
@@ -959,8 +1056,9 @@ fun PlanCanvas(
             )
         }
 
-        for (label in labels) {
-            if (label.pitch != null && abs(label.pitch) >= 0.01) continue
+        for (rawLabel in labels) {
+            if (rawLabel.pitch != null && abs(rawLabel.pitch) >= 0.01) continue
+            val label = applyLabelPreview(rawLabel, preview)
             val selected =
                 selection is Selection.Annotation && selection.isLabel && selection.id == label.id
             drawLabel(
@@ -1046,6 +1144,22 @@ fun PlanCanvas(
                 drawPath(path, selectionColor.copy(alpha = 0.2f))
                 drawPath(path, selectionColor, style = Stroke(width = 2f))
             }
+            is DrawPreview.FurnitureBox -> {
+                val minX = min(p.from.x, p.to.x)
+                val maxX = max(p.from.x, p.to.x)
+                val minY = min(p.from.y, p.to.y)
+                val maxY = max(p.from.y, p.to.y)
+                val path = Path()
+                val c0 = planToScreen(minX, minY, scale)
+                path.moveTo(c0.x, c0.y)
+                listOf(maxX to minY, maxX to maxY, minX to maxY).forEach { (x, y) ->
+                    val pt = planToScreen(x, y, scale)
+                    path.lineTo(pt.x, pt.y)
+                }
+                path.close()
+                drawPath(path, selectionColor.copy(alpha = 0.2f))
+                drawPath(path, selectionColor, style = Stroke(width = 2f))
+            }
             is DrawPreview.Dimension -> {
                 val end = p.end ?: return@Canvas
                 val a = planToScreen(p.start.x, p.start.y, scale)
@@ -1064,9 +1178,11 @@ fun PlanCanvas(
                 }
             }
             is DrawPreview.FurnitureMove -> drawGuides(p.guides)
+            is DrawPreview.WallEdit -> drawGuides(p.guides)
             is DrawPreview.FurnitureRotate,
             is DrawPreview.WallBow,
             is DrawPreview.DimensionEdit,
+            is DrawPreview.LabelMove,
             DrawPreview.None,
             -> Unit
         }
@@ -1108,6 +1224,21 @@ private fun applyDimensionPreview(dim: DimensionLine, preview: DrawPreview): Dim
     )
 }
 
+private fun applyLabelPreview(
+    label: com.homedesign.android.domain.model.PlanLabel,
+    preview: DrawPreview,
+): com.homedesign.android.domain.model.PlanLabel {
+    val edit = preview as? DrawPreview.LabelMove ?: return label
+    if (edit.labelId != label.id) return label
+    return label.copy(x = edit.x, y = edit.y)
+}
+
+private fun selectedWallId(selection: Selection): String? = when (selection) {
+    is Selection.Wall -> selection.id
+    is Selection.Endpoint -> selection.wallID
+    else -> null
+}
+
 private fun classifySelectDrag(
     startPlan: Vec2,
     scale: Double,
@@ -1115,6 +1246,32 @@ private fun classifySelectDrag(
     home: Home,
 ): SelectDragKind {
     val s = max(scale, 0.001)
+
+    // Selected wall endpoint dots — both ends are grabbable (iOS Editor UX batch 2).
+    selectedWallId(selection)?.let { wallId ->
+        val wall = home.walls.find { it.id == wallId } ?: return@let
+        val radius = hitEndpointPx / s
+        val dStart = hypot(startPlan.x - wall.startX, startPlan.y - wall.startY)
+        val dEnd = hypot(startPlan.x - wall.endX, startPlan.y - wall.endY)
+        if (min(dStart, dEnd) <= radius) {
+            return SelectDragKind.WallEndpoint(wallId, atStart = dStart <= dEnd)
+        }
+    }
+
+    if (selection is Selection.Annotation && selection.isLabel) {
+        val label = home.labels.find { it.id == selection.id }
+        if (label != null) {
+            val radius = hitEndpointPx / s
+            if (hypot(startPlan.x - label.x, startPlan.y - label.y) <= radius) {
+                return SelectDragKind.LabelMove(
+                    labelId = label.id,
+                    startX = label.x,
+                    startY = label.y,
+                    startPlan = startPlan,
+                )
+            }
+        }
+    }
 
     if (selection is Selection.Annotation && !selection.isLabel) {
         val dim = home.dimensionLines.find { it.id == selection.id }
@@ -1155,31 +1312,61 @@ private fun classifySelectDrag(
         }
     }
 
-    if (selection !is Selection.Furniture) return SelectDragKind.Pan
-    val level = home.selectedLevelID
-    val piece = home.furniture.find {
-        it.id == selection.id && it.visible && (level == null || it.level == level)
-    } ?: return SelectDragKind.Pan
-    if (piece.movable == false) return SelectDragKind.Pan
-    if (rotateHandleHit(piece, startPlan, s)) {
-        return SelectDragKind.FurnitureRotate(
-            pieceId = piece.id,
-            startAngle = piece.angle,
-            startCursorAngle = atan2(startPlan.y - piece.y, startPlan.x - piece.x),
-            centerX = piece.x,
-            centerY = piece.y,
-        )
+    if (selection is Selection.Furniture) {
+        val level = home.selectedLevelID
+        val piece = home.furniture.find {
+            it.id == selection.id && it.visible && (level == null || it.level == level)
+        }
+        if (piece != null && piece.movable != false) {
+            if (rotateHandleHit(piece, startPlan, s)) {
+                return SelectDragKind.FurnitureRotate(
+                    pieceId = piece.id,
+                    startAngle = piece.angle,
+                    startCursorAngle = atan2(startPlan.y - piece.y, startPlan.x - piece.x),
+                    centerX = piece.x,
+                    centerY = piece.y,
+                )
+            }
+            val halo = hitFurnitureHaloPx / s
+            if (HitTest.furnitureDistance(piece, startPlan, halo) <= 1e-9) {
+                return SelectDragKind.FurnitureMove(
+                    pieceId = piece.id,
+                    startX = piece.x,
+                    startY = piece.y,
+                    startPlan = startPlan,
+                )
+            }
+        }
     }
-    val halo = hitFurnitureHaloPx / s
-    if (HitTest.furnitureDistance(piece, startPlan, halo) <= 1e-9) {
-        return SelectDragKind.FurnitureMove(
-            pieceId = piece.id,
-            startX = piece.x,
-            startY = piece.y,
-            startPlan = startPlan,
-        )
-    }
+
+    // Wall body is deferred until past slop so bow / opening handles can win first.
     return SelectDragKind.Pan
+}
+
+/** Selected-wall body hit after bow/opening deferred checks fail. */
+private fun classifyWallBodyDrag(
+    startPlan: Vec2,
+    scale: Double,
+    selection: Selection,
+    home: Home,
+): SelectDragKind.WallBody? {
+    val wallId = selectedWallId(selection) ?: return null
+    val wall = home.walls.find { it.id == wallId } ?: return null
+    val s = max(scale, 0.001)
+    val hit = HitTest.closestWall(
+        startPlan,
+        listOf(wall),
+        hitWallEdgePx / s,
+    ) ?: return null
+    if (hit.wallID != wallId) return null
+    return SelectDragKind.WallBody(
+        wallId = wallId,
+        startStartX = wall.startX,
+        startStartY = wall.startY,
+        startEndX = wall.endX,
+        startEndY = wall.endY,
+        startPlan = startPlan,
+    )
 }
 
 private fun DrawScope.drawPegman(pose: WalkPose, pos: Offset, color: Color) {

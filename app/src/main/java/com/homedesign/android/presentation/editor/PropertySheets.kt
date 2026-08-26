@@ -67,6 +67,7 @@ fun PropertySheetContent(
     onWallBaseboardThickness: (side: String, thicknessCM: Double) -> Unit = { _, _ -> },
     onFormatPainter: () -> Unit = {},
     onImportWallTexture: (side: String) -> Unit = {},
+    onAddWallDimension: () -> Unit = {},
     onFloorColor: (String) -> Unit = {},
     onFloorPreset: (TexturePreset) -> Unit = {},
     onClearFloorTexture: () -> Unit = {},
@@ -120,6 +121,9 @@ fun PropertySheetContent(
     val dimension = (selection as? Selection.Annotation)
         ?.takeIf { !it.isLabel }
         ?.let { sel -> home.dimensionLines.find { it.id == sel.id } }
+    val planLabel = (selection as? Selection.Annotation)
+        ?.takeIf { it.isLabel }
+        ?.let { sel -> home.labels.find { it.id == sel.id } }
     val canGroup = multi != null && multi.ids.size >= 2 &&
         com.homedesign.android.domain.editor.sharedGroupID(home, multi.ids) == null
     val canUngroup = multi != null &&
@@ -168,6 +172,7 @@ fun PropertySheetContent(
                 onWallBaseboardThickness = onWallBaseboardThickness,
                 onFormatPainter = onFormatPainter,
                 onImportWallTexture = onImportWallTexture,
+                onAddWallDimension = onAddWallDimension,
                 onDelete = onDelete,
             )
             room != null -> RoomPropertyBody(
@@ -191,10 +196,14 @@ fun PropertySheetContent(
             opening != null -> OpeningPropertyBody(
                 opening = opening,
                 unitSystem = unitSystem,
+                hasClipboard = state.hasClipboard,
                 onOpeningWidth = onOpeningWidth,
                 onFlipHinge = onFlipHinge,
                 onFlipSwing = onFlipSwing,
                 onToggleOpen = onToggleOpeningOpen,
+                onCopy = onCopyFurniture,
+                onPaste = onPasteFurniture,
+                onDuplicate = onDuplicateFurniture,
                 onDelete = onDelete,
             )
             furniture != null -> FurniturePropertyBody(
@@ -218,6 +227,11 @@ fun PropertySheetContent(
                 onDimensionLength = onDimensionLength,
                 onDelete = onDelete,
             )
+            planLabel != null -> LabelPropertyBody(
+                label = planLabel,
+                onRename = onRename,
+                onDelete = onDelete,
+            )
             else -> {
                 val title = when (selection) {
                     is Selection.Annotation -> if (selection.isLabel) "Label" else "Dimension"
@@ -228,6 +242,27 @@ fun PropertySheetContent(
             }
         }
     }
+}
+
+@Composable
+private fun LabelPropertyBody(
+    label: com.homedesign.android.domain.model.PlanLabel,
+    onRename: (String) -> Unit,
+    onDelete: () -> Unit,
+) {
+    var text by remember(label.id, label.text) { mutableStateOf(label.text) }
+    Text("Label", style = HdTheme.typography.titleMedium, color = HdTheme.colors.ink)
+    OutlinedTextField(
+        value = text,
+        onValueChange = {
+            text = it
+            onRename(it)
+        },
+        label = { Text("Text") },
+        modifier = Modifier.fillMaxWidth(),
+        singleLine = true,
+    )
+    DeleteRow(onDelete)
 }
 
 @Composable
@@ -334,6 +369,7 @@ private fun WallPropertyBody(
     onWallBaseboardThickness: (side: String, thicknessCM: Double) -> Unit,
     onFormatPainter: () -> Unit,
     onImportWallTexture: (side: String) -> Unit,
+    onAddWallDimension: () -> Unit,
     onDelete: () -> Unit,
 ) {
     var finishSide by remember(wall.id) { mutableStateOf("left") }
@@ -405,6 +441,7 @@ private fun WallPropertyBody(
         }
     }
     TextButton(onClick = onAddCurvePoint) { Text("Add curve point") }
+    TextButton(onClick = onAddWallDimension) { Text("Add dimension") }
 
     Text("Finish", style = HdTheme.typography.labelMedium, color = HdTheme.colors.stone)
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -657,10 +694,14 @@ private fun RoomPropertyBody(
 private fun OpeningPropertyBody(
     opening: com.homedesign.android.domain.model.HomeDoorOrWindow,
     unitSystem: UnitSystem,
+    hasClipboard: Boolean,
     onOpeningWidth: (Double) -> Unit,
     onFlipHinge: () -> Unit,
     onFlipSwing: () -> Unit,
     onToggleOpen: () -> Unit = {},
+    onCopy: () -> Unit,
+    onPaste: () -> Unit,
+    onDuplicate: () -> Unit,
     onDelete: () -> Unit,
 ) {
     Text(
@@ -683,6 +724,11 @@ private fun OpeningPropertyBody(
     }
     TextButton(onClick = onToggleOpen) {
         Text(if (opening.isOpen) "Close" else "Open")
+    }
+    Row(horizontalArrangement = Arrangement.spacedBy(0.dp)) {
+        TextButton(onClick = onCopy) { Text("Copy") }
+        TextButton(onClick = onDuplicate) { Text("Duplicate") }
+        TextButton(onClick = onPaste, enabled = hasClipboard) { Text("Paste") }
     }
     DeleteRow(onDelete)
 }

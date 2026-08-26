@@ -1,13 +1,14 @@
 package com.homedesign.android.domain.export
 
+import com.homedesign.android.domain.geom.ArcWallGeometry
 import com.homedesign.android.domain.geom.FurnitureGeometry
-import com.homedesign.android.domain.geom.RoomGeometry
 import com.homedesign.android.domain.geom.WallGeometry
 import com.homedesign.android.domain.model.Home
 import com.homedesign.android.domain.model.UnitFormat
 import com.homedesign.android.domain.model.UnitSystem
 import java.io.ByteArrayOutputStream
 import java.util.zip.Deflater
+import kotlin.math.abs
 import kotlin.math.round
 
 /** A4 landscape points. */
@@ -16,6 +17,22 @@ const val PAGE_HEIGHT = 595.0
 
 private const val MARGIN = 40.0
 private const val TITLE_STRIP = 30.0
+
+/** Parse `#AARRGGBB` / `#RRGGBB` plan-label colors to RGB 0..1. */
+private fun parseLabelRgb(color: String?): Triple<Double, Double, Double>? {
+    if (color.isNullOrBlank()) return null
+    val hex = color.trim().removePrefix("#")
+    val value = hex.toLongOrNull(16) ?: return null
+    val rgb = when (hex.length) {
+        8 -> value and 0xFFFFFF
+        6 -> value
+        else -> return null
+    }
+    val r = ((rgb shr 16) and 0xFF) / 255.0
+    val g = ((rgb shr 8) and 0xFF) / 255.0
+    val b = (rgb and 0xFF) / 255.0
+    return Triple(r, g, b)
+}
 
 private fun pdfEscape(text: String): String {
     val translit = text
@@ -59,8 +76,9 @@ private fun deflate(data: ByteArray): ByteArray {
 }
 
 /**
- * Contractor-style PDF 1.4: A4 landscape with title block, rooms, walls,
- * openings (OpeningSymbol art), furniture footprints, dimensions, 1 m scale bar.
+ * iOS `PlanPDFRenderer` parity: A4 landscape PDF 1.4 with title block, 1 m scale
+ * bar, rooms, furniture footprints, mitered/curved solid walls, dimensions, and
+ * plan labels (pitch≈0). Geometry sources match the editor canvas.
  */
 fun exportPDF(
     home: Home,
@@ -79,7 +97,10 @@ fun exportPDF(
     val originY = MARGIN + (drawH - planH * scale) / 2.0
 
     fun fx(x: Double): Double = originX + (x - bounds.minX) * scale
+    // PDF Y-up: flip about plan max-Y so the sheet matches on-screen plan orientation.
     fun fy(y: Double): Double = originY + (yRef - y) * scale
+
+    val hairline = maxOf(0.25, 1.0 / scale)
 
     val ops = StringBuilder()
     fun op(s: String) { ops.append(s).append('\n') }
@@ -110,7 +131,7 @@ fun exportPDF(
         op("ET")
     }
 
-    // Title block
+    // Title block (page space) — matches iOS PlanPDFRenderer
     setStrokeRGB(0.0, 0.0, 0.0)
     setFillRGB(0.0, 0.0, 0.0)
     setLineWidth(1.0)
@@ -126,96 +147,77 @@ fun exportPDF(
     stroke()
     text("1 m", MARGIN + metre + 6, barY, 9.0, false)
 
+    val walls = home.walls.filter { levelId == null || it.level == levelId }
+    val wallsById = walls.associateBy { it.id }
+
+    // Rooms (accent fill + stroke; room name/area stay on-canvas, not on iOS PDF)
     val rooms = home.rooms.filter { levelId == null || it.level == levelId }
     for (room in rooms) {
         if (room.points.size < 3) continue
         val pts = room.points.map { fx(it.x) to fy(it.y) }
-        setFillRGB(0.2, 0.45, 0.95)
+        setFillRGB(0.0, 0.48, 1.0)
         op("q")
         op("/GS06 gs")
         polyline(pts, true)
         fill()
         op("Q")
-        setStrokeRGB(0.2, 0.45, 0.95)
-        setLineWidth(0.4)
-        polyline(pts, true)
-        stroke()
-        val lines = roomLabelLines(room, unitSystem)
-        if (lines.isEmpty()) continue
-        val c = RoomGeometry.centroid(room)
-        val cx = fx(c.x)
-        val cy = fy(c.y)
-        setFillRGB(0.1, 0.1, 0.15)
-        val size = 10.0
-        if (lines.size == 1) {
-            text(lines[0], cx, cy, size, false)
-        } else {
-            text(lines[0], cx, cy + size * 0.65, size, true)
-            text(lines[1], cx, cy - size * 0.55, size, false)
-        }
-    }
-
-    val walls = home.walls.filter { levelId == null || it.level == levelId }
-    setStrokeRGB(0.1, 0.1, 0.12)
-    setFillRGB(0.85, 0.85, 0.88)
-    setLineWidth(0.6)
-    for (wall in walls) {
-        val outline = WallGeometry.unjoinedOutline(wall)
-        val pts = outline.map { fx(it.x) to fy(it.y) }
-        polyline(pts, true)
-        fill()
+        setStrokeRGB(0.0, 0.48, 1.0)
+        setLineWidth(hairline)
         polyline(pts, true)
         stroke()
     }
 
-    // Openings
-    val dws = home.doorsAndWindows.filter { levelId == null || it.piece.level == levelId }
-    setStrokeRGB(0.55, 0.12, 0.12)
-    setFillRGB(0.55, 0.12, 0.12)
-    setLineWidth(0.7)
-    for (item in collectOpeningDrawItems(dws, walls)) {
-        for (line in item.lines) {
-            moveTo(fx(line.start.x), fy(line.start.y))
-            lineTo(fx(line.end.x), fy(line.end.y))
-            stroke()
-        }
-        for (arc in item.arcs) {
-            val samples = sampleSashArc(arc)
-            if (samples.size < 2) continue
-            polyline(samples.map { fx(it.x) to fy(it.y) }, false)
-            stroke()
-        }
-    }
-
-    // Furniture footprints + labels
+    // Furniture footprints (no name labels — iOS PlanPDFRenderer)
     val furniture = home.furniture.filter {
         (levelId == null || it.level == levelId) && it.visible
     }
-    setStrokeRGB(0.12, 0.38, 0.18)
-    setFillRGB(0.12, 0.12, 0.12)
-    setLineWidth(0.65)
+    setStrokeRGB(0.25, 0.25, 0.25)
+    setLineWidth(hairline)
     for (piece in furniture) {
-        val corners = FurnitureGeometry.cornerPoints(piece).map { fx(it.x) to fy(it.y) }
-        polyline(corners, true)
+        val corners = FurnitureGeometry.cornerPoints(piece)
+        if (corners.size < 3) continue
+        polyline(corners.map { fx(it.x) to fy(it.y) }, true)
         stroke()
-        text(piece.name ?: "", fx(piece.x), fy(piece.y), 8.0, false)
+    }
+
+    // Walls — solid ink; curved footprint or mitered join outline (iOS)
+    setFillRGB(0.0, 0.0, 0.0)
+    for (wall in walls) {
+        val outline = if (ArcWallGeometry.isCurved(wall)) {
+            ArcWallGeometry.footprint(wall)
+        } else {
+            WallGeometry.miteredPoints(wall, wallsById)
+        }
+        if (outline.size < 3) continue
+        polyline(outline.map { fx(it.x) to fy(it.y) }, true)
+        fill()
     }
 
     // Dimensions
     val dims = home.dimensionLines.filter { levelId == null || it.level == levelId }
     setStrokeRGB(0.25, 0.25, 0.28)
     setFillRGB(0.25, 0.25, 0.28)
-    setLineWidth(0.5)
+    setLineWidth(hairline)
     for (dim in dims) {
         val pts = dimensionPoints(dim)
         if (pts.size != 4) continue
-        // extension ticks + dimension line
         moveTo(fx(pts[0].x), fy(pts[0].y)); lineTo(fx(pts[2].x), fy(pts[2].y)); stroke()
         moveTo(fx(pts[1].x), fy(pts[1].y)); lineTo(fx(pts[3].x), fy(pts[3].y)); stroke()
         moveTo(fx(pts[2].x), fy(pts[2].y)); lineTo(fx(pts[3].x), fy(pts[3].y)); stroke()
         val mx = (pts[2].x + pts[3].x) / 2.0
         val my = (pts[2].y + pts[3].y) / 2.0
-        text(UnitFormat.length(dimLengthCM(dim), unitSystem), fx(mx), fy(my), 8.0, false)
+        text(UnitFormat.length(dimLengthCM(dim), unitSystem), fx(mx), fy(my) + 10.0, 8.0, false)
+    }
+
+    // Plan labels (pitch≈0 only — same filter as iOS)
+    val labels = home.labels.filter {
+        (levelId == null || it.level == levelId) && abs(it.pitch ?: 0.0) < 0.01
+    }
+    for (label in labels) {
+        if (label.text.isBlank()) continue
+        val rgb = parseLabelRgb(label.color) ?: Triple(0.0, 0.0, 0.0)
+        setFillRGB(rgb.first, rgb.second, rgb.third)
+        text(label.text, fx(label.x), fy(label.y), 10.0, false)
     }
 
     val contentBytes = ops.toString().toByteArray(Charsets.ISO_8859_1)

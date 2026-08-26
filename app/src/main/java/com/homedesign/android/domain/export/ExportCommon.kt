@@ -210,18 +210,20 @@ fun sampleSashArc(arc: SashArc, segments: Int = 16): List<Vec2> {
     return pts
 }
 
-/** Web DXF layer table (name → ACI colour). */
-val DXF_LAYER_SPECS: List<Pair<String, Int>> = listOf(
-    "0" to 7,
-    "WALLS" to 7,
-    "WALL_HATCH" to 8,
-    "DOORS_WINDOWS" to 1,
-    "ROOMS" to 8,
-    "ROOM_LABELS" to 7,
-    "FURNITURE" to 3,
-    "FURN_LABELS" to 7,
-    "SHELVES" to 6,
-    "A-DIMS" to 7,
-    "A-NOTES" to 7,
-    "TITLE" to 7,
+/** Web/iOS DXF layer table: name, ACI colour, lineweight (1/100 mm). */
+data class DxfLayerSpec(val name: String, val aci: Int, val lineweight: Int)
+
+val DXF_LAYER_SPECS: List<DxfLayerSpec> = listOf(
+    DxfLayerSpec("0", 7, -3),
+    DxfLayerSpec("WALLS", 7, 50),
+    DxfLayerSpec("WALL_HATCH", 8, 9),
+    DxfLayerSpec("DOORS_WINDOWS", 1, 25),
+    DxfLayerSpec("ROOMS", 8, 9),
+    DxfLayerSpec("ROOM_LABELS", 7, 18),
+    DxfLayerSpec("FURNITURE", 3, 25),
+    DxfLayerSpec("FURN_LABELS", 7, 13),
+    DxfLayerSpec("SHELVES", 6, 18),
+    DxfLayerSpec("A-DIMS", 7, 13),
+    DxfLayerSpec("A-NOTES", 7, 13),
+    DxfLayerSpec("TITLE", 7, 35),
 )

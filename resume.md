@@ -1,6 +1,6 @@
 # HomeDesign Android — Resume State
 
-**Last updated:** 2026-08-26 (pushed main; structures + labels + texture embed; sketch deploy docs)  
+**Last updated:** 2026-08-26 (Phase 1 iOS↔Android 2D parity: DXF R2018, PDF, wall drag, clipboard, ortho)  
 **Repo:** https://github.com/diveydoescode/homedes-android (`main`)  
 **Local path:** `C:\webapp_android\homedes-android`  
 **Companion sources:**
@@ -93,7 +93,7 @@ app/src/main/java/com/homedesign/android/
 |--------|----------------|
 | App runs, basic edit/save | **Done** |
 | = web Stage 1 (`homedes-webapp`) | **~100%** (app parity; live Vercel `/api/sketch` deploy is external — see §12) |
-| = full iOS (`homedesign`) | **~88–92%** (in-app surfaces largely done; left: catalog meshes without SH3D archive, live Vercel sketch deploy, MCP device QA) |
+| = full iOS (`homedesign`) | **~93–95%** (Phase 1 2D editor + PDF/DXF largely at iOS level; left: mesh pack, live Vercel sketch, squaring/marquee polish, UI designer pass) |
 
 ---
 
@@ -299,7 +299,7 @@ Everything else in-repo is done or explicitly closed (incl. crown moulding — n
 |----------|------|--------|
 | 1 | **Catalog-library 3D meshes without SH3D** | **Deferred** — user will supply a mesh pack. Procedural / structure primitives remain until then. |
 | 2 | **Vercel `/api/sketch` deploy** | **Blocked here (no Vercel access).** Docs: `docs/SKETCH_VERCEL_DEPLOY.md` + webapp `DEPLOY.md`. Live origin still 404 until ops deploys. |
-| 3 | **iOS functional parity leftovers** | Stage room / room lighting, AR drag+D-pad+1:1, Filament point lights, roof styles, opening dressings. Shipped: structures, labels, texture zip, stair cutouts, pegman walk-here, door Open/Close drives 3D. |
+| 3 | **iOS functional parity leftovers** | Mostly 3D/AR: Stage room lighting, AR drag+D-pad+1:1, Filament point lights, roof styles, opening dressings. **Phase 1 2D** (walls/openings/place/sketch/PDF/DXF) largely Done — see `docs/PHASE1_IOS_ANDROID_2D_GAP.md`. Tiny 2D leftovers: WallSquaring banner, marquee tool, DXF SVG furniture art. |
 | 4 | **Device QA follow-ups** | Draw-wall chain, openings slide/resize, furniture stamp, export share, AR on real device, sketch mock E2E, structure/label smoke. |
 | 5 | **UI designer pass** | Handoff zip: `artifacts/ui-designer-handoff.zip` — await annotated guidelines for pixel-identical chrome. |
 
@@ -325,3 +325,4 @@ Everything else in-repo is done or explicitly closed (incl. crown moulding — n
 - [x] **Stair floor cutouts** — `staircaseCutOut` punches hole in level above (3D)  
 - [x] **Pegman / Walk here** — Add → Walk here → tap plan; dock Walk uses pose  
 - [x] **Door Open/Close** — sheet toggle drives Filament leaf angle (no sine loop)  
+- [x] **Phase 1 2D iOS parity** — gap matrix `docs/PHASE1_IOS_ANDROID_2D_GAP.md`; PDF mitered/labels; DXF R2018+hatch+BLOCKS; wall endpoint/body drag; opening clipboard; wall-sheet dims; ortho lock; label drag/rename; custom furniture box; MCP export QA (Villa Bianca PDF/DXF)  

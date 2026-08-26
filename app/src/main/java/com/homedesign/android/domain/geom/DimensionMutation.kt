@@ -7,8 +7,57 @@ import java.util.UUID
 import kotlin.math.max
 import kotlin.math.min
 
+private data class OrientedChord(val start: Vec2, val end: Vec2, val offset: Double)
+
 object DimensionMutation {
     val defaultSpacingCM: Double = dimensionFaceGapCM
+
+    /**
+     * One-tap wall dimension (iOS `dimension(forWall:)`): centreline chord
+     * oriented so a positive offset lands outside when the wall bounds the envelope.
+     */
+    fun dimension(
+        forWall: Wall,
+        inWalls: List<Wall>,
+        spacingCM: Double = defaultSpacingCM,
+    ): DimensionLine {
+        val chord = orientedChord(forWall, inWalls, spacingCM)
+        return DimensionLine(
+            id = UUID.randomUUID().toString().lowercase(),
+            xStart = chord.start.x,
+            yStart = chord.start.y,
+            xEnd = chord.end.x,
+            yEnd = chord.end.y,
+            offset = chord.offset,
+            level = forWall.level,
+        )
+    }
+
+    /**
+     * Openings-aware wall dimensions (iOS `dimensions(forWall:)`): broken at
+     * doors/windows so a wall with a centred door yields pier | opening | pier.
+     */
+    fun dimensions(
+        forWall: Wall,
+        inWalls: List<Wall>,
+        openings: List<HomeDoorOrWindow> = emptyList(),
+        spacingCM: Double = defaultSpacingCM,
+    ): List<DimensionLine> {
+        val chord = orientedChord(forWall, inWalls, spacingCM)
+        val levelOpenings = openings.filter { it.piece.level == forWall.level }
+        val bindings = OpeningBinding.bind(
+            walls = inWalls.filter { it.level == forWall.level },
+            openings = levelOpenings,
+        )
+        val segs = openingWorldSegments(forWall, bindings)
+        return splitDimensions(
+            start = chord.start,
+            end = chord.end,
+            openingSegments = segs,
+            offset = chord.offset,
+            level = forWall.level,
+        )
+    }
 
     fun openingWorldSegments(
         wall: Wall,
@@ -104,5 +153,25 @@ object DimensionMutation {
                 splitDimensions(start, end, segs, offset, level, idPrefix)
             }
         }
+    }
+
+    private fun orientedChord(
+        wall: Wall,
+        walls: List<Wall>,
+        spacingCM: Double,
+    ): OrientedChord {
+        val levelWalls = walls.filter { it.level == wall.level }
+        val outline = RoomDetection.exteriorWallEdges(levelWalls)
+        val offset = wall.thickness / 2.0 + spacingCM
+        val s = vec(wall.startX, wall.startY)
+        val e = vec(wall.endX, wall.endY)
+        val edge = outline.firstOrNull { it.wallID == wall.id }
+        if (edge != null) {
+            val edgeDir = sub(edge.end, edge.start)
+            val wallDir = sub(e, s)
+            val aligned = dot(edgeDir, wallDir) > 0
+            return if (aligned) OrientedChord(s, e, offset) else OrientedChord(e, s, offset)
+        }
+        return OrientedChord(s, e, offset)
     }
 }

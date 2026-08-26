@@ -96,6 +96,38 @@ class DimensionAndCurveTest {
     }
 
     @Test
+    fun dimensionsForWall_splitsAtOpening() {
+        val boxed = commitRectangleRoom(
+            HomeFactory.emptyHome("Dim"),
+            vec(0.0, 0.0),
+            vec(400.0, 300.0),
+            idPrefix = "r",
+        )
+        val wall = boxed.walls.first { abs(it.startY - it.endY) < 1e-9 && minOf(it.startY, it.endY) < 1.0 }
+        val door = com.homedesign.android.domain.model.HomeDoorOrWindow(
+            piece = com.homedesign.android.domain.model.HomePieceOfFurniture(
+                id = "door",
+                name = "Door",
+                x = 200.0,
+                y = wall.startY,
+                width = 80.0,
+                depth = 10.0,
+                height = 210.0,
+                angle = 0.0,
+                level = wall.level,
+            ),
+        )
+        val dims = DimensionMutation.dimensions(
+            forWall = wall,
+            inWalls = boxed.walls,
+            openings = listOf(door),
+        )
+        assertEquals(3, dims.size)
+        val unbroken = DimensionMutation.dimension(forWall = wall, inWalls = boxed.walls)
+        assertEquals(unbroken.offset, dims[0].offset, 1e-9)
+    }
+
+    @Test
     fun setSpanBow_materialisesCurveProfile() {
         val wall = Wall(
             id = "w",

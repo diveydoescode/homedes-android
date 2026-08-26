@@ -27,6 +27,7 @@ import com.homedesign.android.domain.geom.defaultWallThicknessCM
 import com.homedesign.android.domain.geom.dist
 import com.homedesign.android.domain.geom.furnitureSnapToWallCM
 import com.homedesign.android.domain.geom.minDrawnWallCM
+import com.homedesign.android.domain.geom.minRectRoomSideCM
 import com.homedesign.android.domain.geom.normalize
 import com.homedesign.android.domain.geom.projectTOnWall
 import com.homedesign.android.domain.geom.scale
@@ -126,6 +127,22 @@ fun previewEndpointMove(
         old,
         vec(newPosition.x - old.x, newPosition.y - old.y),
     )
+    return walls to rooms
+}
+
+/** Whole-wall translate preview; joined corners follow via [WallMutation.moveWall]. */
+fun previewWallMove(
+    home: Home,
+    wallID: String,
+    delta: Vec2,
+): Pair<List<com.homedesign.android.domain.model.Wall>, List<com.homedesign.android.domain.model.Room>> {
+    val wall = home.walls.find { it.id == wallID }
+        ?: return home.walls to home.rooms
+    val curStart = vec(wall.startX, wall.startY)
+    val curEnd = vec(wall.endX, wall.endY)
+    val walls = WallMutation.moveWall(home.walls, wallID, delta)
+    var rooms = RoomMutation.shiftCoincidentVertices(home.rooms, curStart, delta)
+    rooms = RoomMutation.shiftCoincidentVertices(rooms, curEnd, delta)
     return walls to rooms
 }
 
@@ -636,6 +653,52 @@ fun applyPlaceLabel(home: Home, x: Double, y: Double, text: String): Home {
     )
 }
 
+fun applyLabelMove(home: Home, labelID: String, x: Double, y: Double): Home {
+    if (home.labels.none { it.id == labelID }) return home
+    return home.copy(
+        labels = home.labels.map { if (it.id == labelID) it.copy(x = x, y = y) else it },
+        topologyVersion = home.topologyVersion + 1,
+    )
+}
+
+fun applyRenameLabel(home: Home, labelID: String, text: String): Home {
+    val trimmed = text.trim()
+    if (trimmed.isEmpty()) return home
+    if (home.labels.none { it.id == labelID }) return home
+    return home.copy(
+        labels = home.labels.map { if (it.id == labelID) it.copy(text = trimmed) else it },
+        topologyVersion = home.topologyVersion + 1,
+    )
+}
+
+/** Drag-AABB custom furniture (iOS commitFurnitureBox). Min side 10 cm. */
+fun applyCreateFurnitureBox(
+    home: Home,
+    centerX: Double,
+    centerY: Double,
+    width: Double,
+    depth: Double,
+    name: String,
+): Home {
+    if (width < minRectRoomSideCM || depth < minRectRoomSideCM) return home
+    val piece = HomePieceOfFurniture(
+        id = UUID.randomUUID().toString(),
+        catalogID = null,
+        name = name.trim().ifEmpty { "Custom" },
+        x = centerX,
+        y = centerY,
+        elevation = 0.0,
+        width = width,
+        depth = depth,
+        height = 75.0,
+        level = home.selectedLevelID,
+    )
+    return home.copy(
+        furniture = home.furniture + piece,
+        furnitureRevision = home.furnitureRevision + 1,
+    )
+}
+
 fun applyAddDimension(home: Home, from: Vec2, to: Vec2): Home {
     if (dist(from, to) < minDrawnWallCM) return home
     val dim = com.homedesign.android.domain.model.DimensionLine(
@@ -649,6 +712,21 @@ fun applyAddDimension(home: Home, from: Vec2, to: Vec2): Home {
     )
     return home.copy(
         dimensionLines = home.dimensionLines + dim,
+        topologyVersion = home.topologyVersion + 1,
+    )
+}
+
+/** One-tap wall sheet dimensions (split at openings when present). */
+fun applyAddWallDimension(home: Home, wallID: String): Home {
+    val wall = home.walls.find { it.id == wallID } ?: return home
+    val fresh = com.homedesign.android.domain.geom.DimensionMutation.dimensions(
+        forWall = wall,
+        inWalls = home.walls,
+        openings = home.doorsAndWindows,
+    )
+    if (fresh.isEmpty()) return home
+    return home.copy(
+        dimensionLines = home.dimensionLines + fresh,
         topologyVersion = home.topologyVersion + 1,
     )
 }

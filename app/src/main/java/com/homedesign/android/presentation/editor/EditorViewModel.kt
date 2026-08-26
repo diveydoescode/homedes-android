@@ -13,10 +13,11 @@ import com.homedesign.android.domain.catalog.CatalogEntry
 import com.homedesign.android.domain.catalog.catalogById
 import com.homedesign.android.domain.io.SH3DReader
 import com.homedesign.android.domain.editor.EditorDocument
-import com.homedesign.android.domain.editor.FurnitureClipboard
-import com.homedesign.android.domain.editor.FurnitureClipboardPayload
+import com.homedesign.android.domain.editor.PlanClipboard
+import com.homedesign.android.domain.editor.PlanClipboardPayload
 import com.homedesign.android.domain.editor.applyAddChainWall
 import com.homedesign.android.domain.editor.applyAddDimension
+import com.homedesign.android.domain.editor.applyAddWallDimension
 import com.homedesign.android.domain.editor.applyAddOpening
 import com.homedesign.android.domain.editor.applyDimensionLength
 import com.homedesign.android.domain.editor.applyExteriorDimensionChain
@@ -31,10 +32,13 @@ import com.homedesign.android.domain.editor.applyAlign
 import com.homedesign.android.domain.editor.applyDistribute
 import com.homedesign.android.domain.editor.applyMirrorPlan
 import com.homedesign.android.domain.editor.applyMirrorSelection
+import com.homedesign.android.domain.editor.applyCreateFurnitureBox
+import com.homedesign.android.domain.editor.applyLabelMove
 import com.homedesign.android.domain.editor.applyPlaceFurniture
 import com.homedesign.android.domain.editor.applyPlaceLabel
 import com.homedesign.android.domain.editor.applyRotatePlan
 import com.homedesign.android.domain.editor.applyRenameFurniture
+import com.homedesign.android.domain.editor.applyRenameLabel
 import com.homedesign.android.domain.editor.applyRenameRoom
 import com.homedesign.android.domain.editor.applyReplaceFurniture
 import com.homedesign.android.domain.editor.applyRoomSize
@@ -72,10 +76,13 @@ import com.homedesign.android.domain.model.CeilingStyle
 import com.homedesign.android.domain.textures.TexturePreset
 import com.homedesign.android.domain.textures.UserTextureStore
 import com.homedesign.android.domain.editor.commitFurnitureMove
+import com.homedesign.android.domain.editor.commitGeometryPreview
 import com.homedesign.android.domain.editor.commitRectangleRoom
 import com.homedesign.android.domain.editor.deleteSelection
+import com.homedesign.android.domain.editor.previewEndpointMove
 import com.homedesign.android.domain.editor.previewSpanBow
 import com.homedesign.android.domain.editor.previewWallBow
+import com.homedesign.android.domain.editor.previewWallMove
 import com.homedesign.android.domain.editor.toggleFurnitureInSelection
 import com.homedesign.android.domain.editor.wallsOnLevel
 import com.homedesign.android.domain.export.PlanThumbnail
@@ -93,6 +100,7 @@ import com.homedesign.android.domain.geom.HitTest
 import com.homedesign.android.domain.geom.LevelMutation
 import com.homedesign.android.domain.geom.OpeningBinding
 import com.homedesign.android.domain.geom.OpeningKind
+import com.homedesign.android.domain.geom.OrthoLock
 import com.homedesign.android.domain.geom.PlanAxis
 import com.homedesign.android.domain.geom.PlanRotation
 import com.homedesign.android.domain.geom.ResizeSide
@@ -111,6 +119,7 @@ import com.homedesign.android.domain.geom.hitFurnitureHaloPx
 import com.homedesign.android.domain.geom.hitWallCoarsePx
 import com.homedesign.android.domain.geom.interiorThicknessCM
 import com.homedesign.android.domain.geom.minDrawnWallCM
+import com.homedesign.android.domain.geom.minRectRoomSideCM
 import com.homedesign.android.domain.geom.projectTOnWall
 import com.homedesign.android.domain.geom.resolveDimensionSnap
 import com.homedesign.android.domain.geom.spanBow
@@ -127,6 +136,7 @@ import java.io.File
 import java.io.FileOutputStream
 import javax.inject.Inject
 import kotlin.math.PI
+import kotlin.math.abs
 import kotlin.math.atan2
 import kotlin.math.max
 import kotlinx.coroutines.Dispatchers
@@ -158,7 +168,7 @@ class EditorViewModel @Inject constructor(
     private var openingDrag: OpeningDragGesture? = null
     private var bowDrag: BowDragGesture? = null
     private var breakpointDrag: BreakpointDragGesture? = null
-    private var clipboard: FurnitureClipboardPayload? = null
+    private var clipboard: PlanClipboardPayload? = null
 
     private val _state = MutableStateFlow(EditorUiState())
     val state: StateFlow<EditorUiState> = _state.asStateFlow()
@@ -174,6 +184,7 @@ class EditorViewModel @Inject constructor(
                         unitSystem = settings.unitSystem,
                         recentFurnitureIds = settings.recentFurnitureCatalogIds,
                         showEditorTip = !settings.editorTipDismissed,
+                        orthoLock = settings.orthoLock,
                     )
                 }
             }
@@ -186,6 +197,12 @@ class EditorViewModel @Inject constructor(
 
     fun dismissEditorTip() {
         viewModelScope.launch { settingsRepository.setEditorTipDismissed(true) }
+    }
+
+    fun toggleOrthoLock() {
+        val next = !_state.value.orthoLock
+        _state.update { it.copy(orthoLock = next) }
+        viewModelScope.launch { settingsRepository.setOrthoLock(next) }
     }
 
     fun recordRecentFurniture(catalogId: String) {
@@ -285,6 +302,7 @@ class EditorViewModel @Inject constructor(
                 selection = Selection.None,
                 preview = DrawPreview.None,
                 pendingLabelPoint = null,
+                pendingFurnitureBox = null,
             )
         }
     }
@@ -320,26 +338,32 @@ class EditorViewModel @Inject constructor(
     }
 
     fun copySelection() {
-        val payload = FurnitureClipboard.encodeSelection(document.home, document.selection) ?: return
+        val payload = PlanClipboard.encodeSelection(document.home, document.selection) ?: return
         clipboard = payload
         _state.update { it.copy(hasClipboard = true, toast = "Copied") }
     }
 
-    fun pasteClipboard() {
+    fun pasteClipboard(atX: Double? = null, atY: Double? = null, targetWallID: String? = null) {
         val payload = clipboard ?: return
-        val (next, ids) = FurnitureClipboard.applyPaste(document.home, payload)
-        if (ids.isEmpty()) return
-        document.replaceHome(next)
-        document.setSelection(selectionForFurnitureIds(ids))
+        val result = PlanClipboard.applyPaste(
+            document.home,
+            payload,
+            atX = atX,
+            atY = atY,
+            targetWallID = targetWallID,
+        )
+        if (result.isEmpty) return
+        document.replaceHome(result.home)
+        document.setSelection(selectionForPaste(result.pieceIds, result.openingIds))
         markDirty(coalesce = false)
         publish(toast = "Pasted")
     }
 
     fun duplicateSelection() {
-        val (next, ids) = FurnitureClipboard.applyDuplicate(document.home, document.selection)
-        if (ids.isEmpty()) return
-        document.replaceHome(next)
-        document.setSelection(selectionForFurnitureIds(ids))
+        val result = PlanClipboard.applyDuplicate(document.home, document.selection)
+        if (result.isEmpty) return
+        document.replaceHome(result.home)
+        document.setSelection(selectionForPaste(result.pieceIds, result.openingIds))
         markDirty(coalesce = false)
         publish()
     }
@@ -415,6 +439,19 @@ class EditorViewModel @Inject constructor(
         document.replaceHome(next)
         markDirty()
         publish()
+    }
+
+    fun addDimensionForSelectedWall() {
+        val wallId = when (val sel = document.selection) {
+            is Selection.Wall -> sel.id
+            is Selection.Endpoint -> sel.wallID
+            else -> return
+        }
+        val next = applyAddWallDimension(document.home, wallId)
+        if (next === document.home) return
+        document.replaceHome(next)
+        markDirty(coalesce = false)
+        publish(toast = "Dimension added")
     }
 
     fun onDimensionEndPreview(dimId: String, atStart: Boolean, x: Double, y: Double) {
@@ -927,6 +964,11 @@ class EditorViewModel @Inject constructor(
         val next = when (val sel = document.selection) {
             is Selection.Room -> applyRenameRoom(document.home, sel.id, name)
             is Selection.Furniture -> applyRenameFurniture(document.home, sel.id, name)
+            is Selection.Annotation -> if (sel.isLabel) {
+                applyRenameLabel(document.home, sel.id, name)
+            } else {
+                return
+            }
             else -> return
         }
         if (next === document.home) return
@@ -1052,6 +1094,7 @@ class EditorViewModel @Inject constructor(
             EditorTool.Select -> selectAt(plan, scalePxPerCm, additive = additive)
             is EditorTool.DrawWall -> onDrawWallTap(plan, tool.thickness)
             EditorTool.DrawRoom -> Unit // drag-based
+            EditorTool.DrawFurnitureBox -> Unit // drag-based
             EditorTool.Dimension -> onDimensionTap(plan)
             is EditorTool.PlaceFurniture -> placeFurniture(tool.catalogId, plan, stamp = tool.stamp)
             is EditorTool.PlaceOpening -> placeOpening(tool.kind, plan, scalePxPerCm)
@@ -1206,12 +1249,91 @@ class EditorViewModel @Inject constructor(
         publish()
     }
 
+    fun onDrawFurnitureBoxDrag(from: Vec2, to: Vec2) {
+        _state.update { it.copy(preview = DrawPreview.FurnitureBox(from, to)) }
+    }
+
+    /** Arm name dialog after a real AABB; tap-cancel exits the tool. */
+    fun onDrawFurnitureBoxCommit(from: Vec2, to: Vec2) {
+        _state.update { it.copy(preview = DrawPreview.None) }
+        val width = abs(to.x - from.x)
+        val depth = abs(to.y - from.y)
+        if (width < minRectRoomSideCM || depth < minRectRoomSideCM) {
+            setTool(EditorTool.Select)
+            return
+        }
+        _state.update {
+            it.copy(
+                pendingFurnitureBox = PendingFurnitureBox(
+                    centerX = (from.x + to.x) / 2.0,
+                    centerY = (from.y + to.y) / 2.0,
+                    width = width,
+                    depth = depth,
+                ),
+            )
+        }
+    }
+
+    fun confirmFurnitureBox(name: String) {
+        val pending = _state.value.pendingFurnitureBox ?: return
+        val next = applyCreateFurnitureBox(
+            document.home,
+            pending.centerX,
+            pending.centerY,
+            pending.width,
+            pending.depth,
+            name,
+        )
+        if (next === document.home) {
+            _state.update { it.copy(pendingFurnitureBox = null, tool = EditorTool.Select, preview = DrawPreview.None) }
+            return
+        }
+        document.replaceHome(next)
+        val added = next.furniture.lastOrNull()?.id
+        if (added != null) document.setSelection(Selection.Furniture(added))
+        else document.setSelection(Selection.None)
+        Haptics.commit(appContext)
+        markDirty(coalesce = false)
+        _state.update {
+            it.copy(
+                pendingFurnitureBox = null,
+                tool = EditorTool.Select,
+                preview = DrawPreview.None,
+            )
+        }
+        publish()
+    }
+
+    fun cancelFurnitureBox() {
+        if (_state.value.pendingFurnitureBox == null) return
+        _state.update { it.copy(pendingFurnitureBox = null) }
+        setTool(EditorTool.Select)
+    }
+
+    fun onLabelMovePreview(labelId: String, x: Double, y: Double) {
+        if (document.home.labels.none { it.id == labelId }) return
+        _state.update { it.copy(preview = DrawPreview.LabelMove(labelId, x, y)) }
+    }
+
+    fun commitLabelMoveGesture(labelId: String, x: Double, y: Double) {
+        _state.update { it.copy(preview = DrawPreview.None) }
+        val label = document.home.labels.find { it.id == labelId } ?: return
+        if (label.x == x && label.y == y) return
+        val next = applyLabelMove(document.home, labelId, x, y)
+        if (next === document.home) return
+        document.replaceHome(next)
+        document.setSelection(Selection.Annotation(labelId, isLabel = true))
+        markDirty(coalesce = false)
+        publish()
+    }
+
     fun cancelPreview() {
         wallDrawStart = null
         dimensionStart = null
         bowDrag = null
         breakpointDrag = null
         _state.update { it.copy(preview = DrawPreview.None) }
+        // Selection may have been promoted to Endpoint during classify; leave as-is.
     }
 
     fun onFurnitureMovePreview(pieceId: String, x: Double, y: Double) {
@@ -1342,6 +1464,69 @@ class EditorViewModel @Inject constructor(
         if (next === document.home) return
         document.replaceHome(next)
         document.setSelection(Selection.Furniture(pieceId))
+        markDirty(coalesce = false)
+        publish()
+    }
+
+    /**
+     * Live endpoint drag. Snap accepts other-wall endpoints only (iOS parity);
+     * grid / midpoint / centre-line are demoted for touch precision.
+     */
+    fun onWallEndpointPreview(
+        wallId: String,
+        atStart: Boolean,
+        x: Double,
+        y: Double,
+        scalePxPerCm: Float,
+    ) {
+        val home = document.home
+        val wall = home.walls.find { it.id == wallId } ?: return
+        // Do not publish Selection.Endpoint mid-drag — selection is a pointerInput key.
+        val scale = max(scalePxPerCm.toDouble(), 0.001)
+        val snapRadius = hitEndpointPx / scale
+        val snapWalls = home.walls.filter { it.id != wallId }
+        // Ortho lock pivots against the fixed end before snap (iOS parity).
+        var proposed = vec(x, y)
+        if (_state.value.orthoLock) {
+            val anchor = if (atStart) vec(wall.endX, wall.endY) else vec(wall.startX, wall.startY)
+            proposed = OrthoLock.constrainToOctant(anchor, proposed)
+        }
+        val snap = SnapEngine.snap(proposed, snapWalls, snapRadius)
+        val point = if (snap.target is SnapTarget.WallEndpoint) snap.snappedPoint else proposed
+        val guides = if (snap.target is SnapTarget.WallEndpoint) {
+            listOf(SnapGuideLine(snap.snappedPoint, point))
+        } else {
+            emptyList()
+        }
+        val (walls, rooms) = previewEndpointMove(home, wallId, atStart, point)
+        _state.update { it.copy(preview = DrawPreview.WallEdit(walls, rooms, guides)) }
+    }
+
+    fun onWallBodyPreview(wallId: String, dx: Double, dy: Double) {
+        val home = document.home
+        if (home.walls.none { it.id == wallId }) return
+        val (walls, rooms) = previewWallMove(home, wallId, vec(dx, dy))
+        _state.update { it.copy(preview = DrawPreview.WallEdit(walls, rooms)) }
+    }
+
+    fun commitWallEditGesture() {
+        val edit = _state.value.preview as? DrawPreview.WallEdit ?: run {
+            _state.update { it.copy(preview = DrawPreview.None) }
+            return
+        }
+        _state.update { it.copy(preview = DrawPreview.None) }
+        val home = document.home
+        if (edit.walls == home.walls) return
+        val wallId = when (val sel = document.selection) {
+            is Selection.Wall -> sel.id
+            is Selection.Endpoint -> sel.wallID
+            else -> null
+        }
+        val next = commitGeometryPreview(home, edit.walls, edit.rooms)
+        document.replaceHome(next)
+        if (wallId != null && next.walls.any { it.id == wallId }) {
+            document.setSelection(Selection.Wall(wallId))
+        }
         markDirty(coalesce = false)
         publish()
     }
@@ -1531,8 +1716,13 @@ class EditorViewModel @Inject constructor(
         scalePxPerCm: Float,
         from: Vec2?,
     ): ResolvedDraw {
+        // Ortho folds the finger onto an 8-ray before snap (iOS draw path).
+        var input = planPt
+        if (_state.value.orthoLock && from != null) {
+            input = OrthoLock.constrainToOctant(from, planPt)
+        }
         val radius = 24.0 / max(scalePxPerCm.toDouble(), 0.001)
-        val snap = SnapEngine.snap(planPt, walls, radius)
+        val snap = SnapEngine.snap(input, walls, radius)
         var point = snap.snappedPoint
         if (from != null && snap.target !is SnapTarget.WallEndpoint) {
             point = AngleSnap.snapWallEnd(from, point, walls)
@@ -1553,8 +1743,8 @@ class EditorViewModel @Inject constructor(
             }
         } else if (from != null) {
             // Angle-snap cue: dashed line along preferred axis when end moved.
-            val raw = AngleSnap.snapWallEnd(from, planPt, walls)
-            if (dist(raw, planPt) > 1e-6) {
+            val raw = AngleSnap.snapWallEnd(from, input, walls)
+            if (dist(raw, input) > 1e-6) {
                 guides.add(SnapGuideLine(from, point))
             }
         }
@@ -1705,6 +1895,13 @@ class EditorViewModel @Inject constructor(
         ids.isEmpty() -> Selection.None
         ids.size == 1 -> Selection.Furniture(ids.first())
         else -> Selection.MultiFurniture(ids)
+    }
+
+    private fun selectionForPaste(pieceIds: List<String>, openingIds: List<String>): Selection = when {
+        pieceIds.isNotEmpty() -> selectionForFurnitureIds(pieceIds)
+        openingIds.size == 1 -> Selection.Opening(openingIds.first())
+        openingIds.isNotEmpty() -> Selection.Opening(openingIds.first())
+        else -> Selection.None
     }
 
     private fun markDirty(coalesce: Boolean = true) {
