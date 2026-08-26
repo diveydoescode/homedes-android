@@ -29,16 +29,22 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.automirrored.outlined.Redo
+import androidx.compose.material.icons.automirrored.outlined.Undo
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.CameraAlt
 import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.DirectionsWalk
+import androidx.compose.material.icons.outlined.GridView
+import androidx.compose.material.icons.outlined.IosShare
+import androidx.compose.material.icons.outlined.MoreVert
+import androidx.compose.material.icons.outlined.ViewInAr
 import androidx.compose.material.icons.outlined.Weekend
 import androidx.compose.material.icons.outlined.FileDownload
 import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.Layers
-import androidx.compose.material.icons.outlined.Redo
 import androidx.compose.material.icons.outlined.Straighten
-import androidx.compose.material.icons.outlined.Undo
+import androidx.compose.material.icons.outlined.ViewQuilt
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -109,11 +115,8 @@ private val SidePanelMinWidth = 672.dp
 private val SidePanelWidth = 360.dp
 /** Side-by-side 2D+3D Split chip is offered at/above this width. */
 private val SplitViewMinWidth = 900.dp
-/**
- * Clearance below status bars for floating tip/trace/place banners.
- * Two-row top chrome (title row + mode/units row) needs more than a single toolbar.
- */
-private val TopChromeClearance = 112.dp
+/** Clearance below status bars for floating tip/trace/place banners (single iOS-style strip). */
+private val TopChromeClearance = 72.dp
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -263,18 +266,12 @@ fun EditorScreen(
             },
     ) {
         val sidePanel = maxWidth >= SidePanelMinWidth
-        val splitAvailable = maxWidth >= SplitViewMinWidth
+        val wideSplit = maxWidth >= SplitViewMinWidth
         val placeTool = state.tool as? EditorTool.PlaceFurniture
         val showPlanChrome = state.viewMode == EditorViewMode.Plan2D ||
             state.viewMode == EditorViewMode.Split
         // Kyant Backdrop — canvas is the layer; chrome draws glass over it.
         val glassBackdrop = rememberHdLayerBackdrop(HdTheme.colors.paper)
-
-        LaunchedEffect(splitAvailable, state.viewMode) {
-            if (!splitAvailable && state.viewMode == EditorViewMode.Split) {
-                viewModel.setViewMode(EditorViewMode.Plan2D)
-            }
-        }
 
         when (state.viewMode) {
             EditorViewMode.View3D, EditorViewMode.Walk -> {
@@ -304,20 +301,20 @@ fun EditorScreen(
                 )
             }
             EditorViewMode.Split -> {
-                Row(
-                    Modifier
-                        .fillMaxSize()
-                        .hdLayerBackdrop(glassBackdrop)
-                        .padding(
-                            top = TopChromeClearance,
-                            bottom = 100.dp,
-                            end = if (sidePanel && hasSelection && state.tool is EditorTool.Select) {
-                                SidePanelWidth + 24.dp
-                            } else {
-                                0.dp
-                            },
-                        ),
-                ) {
+                // iOS phone: 3D above (~45%) / 2D below (~55%). Wide: side-by-side.
+                val splitPad = Modifier
+                    .fillMaxSize()
+                    .hdLayerBackdrop(glassBackdrop)
+                    .padding(
+                        top = TopChromeClearance,
+                        bottom = 100.dp,
+                        end = if (sidePanel && hasSelection && state.tool is EditorTool.Select) {
+                            SidePanelWidth + 24.dp
+                        } else {
+                            0.dp
+                        },
+                    )
+                val planCanvas: @Composable (Modifier) -> Unit = { mod ->
                     PlanCanvas(
                         home = state.home,
                         selection = state.selection,
@@ -352,24 +349,41 @@ fun EditorScreen(
                         onDimensionEndPreview = viewModel::onDimensionEndPreview,
                         onDimensionOffsetPreview = viewModel::onDimensionOffsetPreview,
                         onDimensionEditCommit = viewModel::commitDimensionEdit,
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxHeight(),
+                        modifier = mod,
                     )
-                    Box(
-                        Modifier
-                            .width(1.dp)
-                            .fillMaxHeight()
-                            .background(HdTheme.colors.hairline),
-                    )
-                    Plan3DScreen(
-                        home = state.home,
-                        cameraMode = Plan3DCameraMode.Orbit,
-                        onBackToPlan = { viewModel.setViewMode(EditorViewMode.Plan2D) },
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxHeight(),
-                    )
+                }
+                if (wideSplit) {
+                    Row(splitPad) {
+                        planCanvas(Modifier.weight(1f).fillMaxHeight())
+                        Box(
+                            Modifier
+                                .width(1.dp)
+                                .fillMaxHeight()
+                                .background(HdTheme.colors.hairline),
+                        )
+                        Plan3DScreen(
+                            home = state.home,
+                            cameraMode = Plan3DCameraMode.Orbit,
+                            onBackToPlan = { viewModel.setViewMode(EditorViewMode.Plan2D) },
+                            modifier = Modifier.weight(1f).fillMaxHeight(),
+                        )
+                    }
+                } else {
+                    Column(splitPad) {
+                        Plan3DScreen(
+                            home = state.home,
+                            cameraMode = Plan3DCameraMode.Orbit,
+                            onBackToPlan = { viewModel.setViewMode(EditorViewMode.Plan2D) },
+                            modifier = Modifier.weight(0.45f).fillMaxWidth(),
+                        )
+                        Box(
+                            Modifier
+                                .fillMaxWidth()
+                                .height(1.dp)
+                                .background(HdTheme.colors.hairline),
+                        )
+                        planCanvas(Modifier.weight(0.55f).fillMaxWidth())
+                    }
                 }
             }
             EditorViewMode.Plan2D -> PlanCanvas(
@@ -421,206 +435,178 @@ fun EditorScreen(
             )
         }
 
-        Column(
+        // iOS EditorDeckTopBar: back · title/saved · units · mode icons · share · overflow
+        Row(
             modifier = Modifier
                 .align(Alignment.TopCenter)
                 .fillMaxWidth()
                 .statusBarsPadding()
+                .padding(horizontal = 10.dp, vertical = 8.dp)
+                .hdGlassChrome(
+                    backdrop = glassBackdrop,
+                    shape = RoundedCornerShape(20.dp),
+                    fallbackFill = HdTheme.colors.ivory.copy(alpha = 0.92f),
+                )
                 .padding(horizontal = 8.dp, vertical = 6.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            // Title row: keep back / title / undo / floor / file visible on phone widths.
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .hdGlassChrome(
-                        backdrop = glassBackdrop,
-                        shape = RoundedCornerShape(20.dp),
-                        fallbackFill = HdTheme.colors.ivory.copy(alpha = 0.92f),
-                    )
-                    .padding(horizontal = 4.dp, vertical = 4.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                IconButton(onClick = {
-                    viewModel.flushSave()
-                    onBack()
-                }) {
+            IconButton(onClick = {
+                viewModel.flushSave()
+                onBack()
+            }) {
+                Icon(
+                    Icons.AutoMirrored.Outlined.ArrowBack,
+                    contentDescription = "Back to designs",
+                    tint = HdTheme.colors.architectInk,
+                )
+            }
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = state.title.ifBlank { "Untitled" },
+                    style = HdTheme.typography.titleMedium,
+                    color = HdTheme.colors.architectInk,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    text = state.savedLabel,
+                    style = HdTheme.typography.labelSmall,
+                    color = HdTheme.colors.architectGray,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            if (showPlanChrome) {
+                UnitSystemChips(
+                    selected = state.unitSystem,
+                    onSelect = viewModel::setUnitSystem,
+                )
+                Spacer(Modifier.width(4.dp))
+            }
+            EditorModeIconSwitch(
+                selected = state.viewMode,
+                onSelect = viewModel::setViewMode,
+                showSplit = true,
+            )
+            IconButton(onClick = { viewModel.exportPdf() }) {
+                Icon(
+                    Icons.Outlined.IosShare,
+                    contentDescription = "Share or export",
+                    tint = HdTheme.colors.architectInk,
+                )
+            }
+            Box {
+                IconButton(onClick = { exportOpen = true }) {
                     Icon(
-                        Icons.AutoMirrored.Outlined.ArrowBack,
-                        contentDescription = "Back to designs",
+                        Icons.Outlined.MoreVert,
+                        contentDescription = "More",
                         tint = HdTheme.colors.architectInk,
                     )
                 }
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = state.title.ifBlank { "Untitled" },
-                        style = HdTheme.typography.titleMedium,
-                        color = HdTheme.colors.architectInk,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
+                DropdownMenu(expanded = exportOpen, onDismissRequest = { exportOpen = false }) {
+                    DropdownMenuItem(
+                        text = { Text("Open .homedesign…") },
+                        onClick = {
+                            exportOpen = false
+                            pickHomedesign.launch("*/*")
+                        },
                     )
-                    Text(
-                        text = state.savedLabel,
-                        style = HdTheme.typography.labelSmall,
-                        color = HdTheme.colors.architectGray,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
+                    DropdownMenuItem(
+                        text = { Text("Open .sh3d…") },
+                        onClick = {
+                            exportOpen = false
+                            pickSh3d.launch("*/*")
+                        },
                     )
-                }
-                IconButton(onClick = viewModel::undo, enabled = state.canUndo) {
-                    Icon(Icons.Outlined.Undo, contentDescription = "Undo", tint = HdTheme.colors.architectInk)
-                }
-                IconButton(onClick = viewModel::redo, enabled = state.canRedo) {
-                    Icon(Icons.Outlined.Redo, contentDescription = "Redo", tint = HdTheme.colors.architectInk)
-                }
-                FloorSelectorButton(
-                    levels = state.home.levels,
-                    selectedLevelID = state.home.selectedLevelID,
-                    ghostOtherLevels = state.ghostOtherLevels,
-                    menuOpen = floorMenuOpen,
-                    onMenuOpenChange = { floorMenuOpen = it },
-                    onSelectLevel = viewModel::selectLevel,
-                    onAddFloor = viewModel::addFloorOnTop,
-                    onToggleGhost = viewModel::toggleGhostOtherLevels,
-                )
-                Box {
-                    IconButton(onClick = { exportOpen = true }) {
-                        Icon(
-                            Icons.Outlined.FileDownload,
-                            contentDescription = "File",
-                            tint = HdTheme.colors.architectInk,
-                        )
+                    DropdownMenuItem(
+                        text = { Text("Save a copy…") },
+                        onClick = {
+                            exportOpen = false
+                            saveCopy.launch(viewModel.suggestedSaveFilename())
+                        },
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Trace photo…") },
+                        onClick = {
+                            exportOpen = false
+                            pickTrace.launch("image/*")
+                        },
+                    )
+                    HorizontalDivider()
+                    DropdownMenuItem(
+                        text = { Text("Floors…") },
+                        onClick = {
+                            exportOpen = false
+                            floorMenuOpen = true
+                        },
+                    )
+                    if (state.home.levels.isNotEmpty()) {
+                        // Keep floor menu reachable via overflow when strip is tight.
                     }
-                    DropdownMenu(expanded = exportOpen, onDismissRequest = { exportOpen = false }) {
-                        DropdownMenuItem(
-                            text = { Text("Open .homedesign…") },
-                            onClick = {
-                                exportOpen = false
-                                pickHomedesign.launch("*/*")
-                            },
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Open .sh3d…") },
-                            onClick = {
-                                exportOpen = false
-                                pickSh3d.launch("*/*")
-                            },
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Save a copy…") },
-                            onClick = {
-                                exportOpen = false
-                                saveCopy.launch(viewModel.suggestedSaveFilename())
-                            },
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Trace photo…") },
-                            onClick = {
-                                exportOpen = false
-                                pickTrace.launch("image/*")
-                            },
-                        )
-                        HorizontalDivider()
-                        DropdownMenuItem(
-                            text = { Text("Units: millimetres") },
-                            onClick = {
-                                exportOpen = false
-                                viewModel.setUnitSystem(UnitSystem.Millimetre)
-                            },
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Units: centimetres") },
-                            onClick = {
-                                exportOpen = false
-                                viewModel.setUnitSystem(UnitSystem.Metric)
-                            },
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Units: feet & inches") },
-                            onClick = {
-                                exportOpen = false
-                                viewModel.setUnitSystem(UnitSystem.Imperial)
-                            },
-                        )
-                        HorizontalDivider()
-                        DropdownMenuItem(
-                            text = { Text("Mirror plan L↔R") },
-                            onClick = {
-                                exportOpen = false
-                                viewModel.mirrorPlan(PlanAxis.Vertical)
-                            },
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Mirror plan T↔B") },
-                            onClick = {
-                                exportOpen = false
-                                viewModel.mirrorPlan(PlanAxis.Horizontal)
-                            },
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Rotate plan 90° CW") },
-                            onClick = {
-                                exportOpen = false
-                                viewModel.rotatePlan(PlanRotation.Clockwise)
-                            },
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Rotate plan 90° CCW") },
-                            onClick = {
-                                exportOpen = false
-                                viewModel.rotatePlan(PlanRotation.CounterClockwise)
-                            },
-                        )
-                        HorizontalDivider()
-                        DropdownMenuItem(
-                            text = { Text("Export PDF") },
-                            onClick = {
-                                exportOpen = false
-                                viewModel.exportPdf()
-                            },
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Export DXF") },
-                            onClick = {
-                                exportOpen = false
-                                viewModel.exportDxf()
-                            },
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Export .homedesign") },
-                            onClick = {
-                                exportOpen = false
-                                viewModel.exportHomedesign()
-                            },
-                        )
-                    }
-                }
-            }
-            // Mode / units row — separate so phone widths keep title + floor + file visible.
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .hdGlassChrome(
-                        backdrop = glassBackdrop,
-                        shape = RoundedCornerShape(16.dp),
-                        fallbackFill = HdTheme.colors.ivory.copy(alpha = 0.92f),
+                    HorizontalDivider()
+                    DropdownMenuItem(
+                        text = { Text("Mirror plan L↔R") },
+                        onClick = {
+                            exportOpen = false
+                            viewModel.mirrorPlan(PlanAxis.Vertical)
+                        },
                     )
-                    .padding(horizontal = 8.dp, vertical = 4.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
-            ) {
-                ViewModeChips(
-                    selected = state.viewMode,
-                    onSelect = viewModel::setViewMode,
-                    showSplit = splitAvailable,
-                )
-                if (showPlanChrome) {
-                    UnitSystemChips(
-                        selected = state.unitSystem,
-                        onSelect = viewModel::setUnitSystem,
+                    DropdownMenuItem(
+                        text = { Text("Mirror plan T↔B") },
+                        onClick = {
+                            exportOpen = false
+                            viewModel.mirrorPlan(PlanAxis.Horizontal)
+                        },
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Rotate plan 90° CW") },
+                        onClick = {
+                            exportOpen = false
+                            viewModel.rotatePlan(PlanRotation.Clockwise)
+                        },
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Rotate plan 90° CCW") },
+                        onClick = {
+                            exportOpen = false
+                            viewModel.rotatePlan(PlanRotation.CounterClockwise)
+                        },
+                    )
+                    HorizontalDivider()
+                    DropdownMenuItem(
+                        text = { Text("Export PDF") },
+                        onClick = {
+                            exportOpen = false
+                            viewModel.exportPdf()
+                        },
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Export DXF") },
+                        onClick = {
+                            exportOpen = false
+                            viewModel.exportDxf()
+                        },
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Export .homedesign") },
+                        onClick = {
+                            exportOpen = false
+                            viewModel.exportHomedesign()
+                        },
                     )
                 }
             }
+            // Floor selector sits in overflow-adjacent slot on the strip when space allows.
+            FloorSelectorButton(
+                levels = state.home.levels,
+                selectedLevelID = state.home.selectedLevelID,
+                ghostOtherLevels = state.ghostOtherLevels,
+                menuOpen = floorMenuOpen,
+                onMenuOpenChange = { floorMenuOpen = it },
+                onSelectLevel = viewModel::selectLevel,
+                onAddFloor = viewModel::addFloorOnTop,
+                onToggleGhost = viewModel::toggleGhostOtherLevels,
+            )
         }
 
         if (showPlanChrome &&
@@ -664,34 +650,22 @@ fun EditorScreen(
             horizontalArrangement = Arrangement.spacedBy(4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            // iOS EditorDock: Edit⇄Measure · Add · Catalog · Sketch · Walk · Undo · Redo
             val measure = state.tool is EditorTool.Dimension
             DockItem(
                 label = if (measure) "Measure" else "Edit",
-                active = measure || state.tool is EditorTool.Select,
+                active = measure,
                 onClick = {
                     if (measure) viewModel.setTool(EditorTool.Select)
                     else viewModel.setTool(EditorTool.Dimension)
                 },
             ) {
                 Icon(
-                    Icons.Outlined.Straighten,
+                    if (measure) Icons.Outlined.Straighten else Icons.Outlined.GridView,
                     contentDescription = null,
                     tint = if (measure) HdTheme.colors.paper else HdTheme.colors.architectInk,
                     modifier = Modifier.size(18.dp),
                 )
-            }
-            if (measure) {
-                DockItem(
-                    label = "Ext dims",
-                    active = false,
-                    onClick = { viewModel.applyExteriorDims() },
-                ) {
-                    Text(
-                        "Ext",
-                        color = HdTheme.colors.architectInk,
-                        style = HdTheme.typography.labelSmall,
-                    )
-                }
             }
             if (state.tool is EditorTool.DrawWall) {
                 val thickness = (state.tool as EditorTool.DrawWall).thickness
@@ -746,6 +720,54 @@ fun EditorScreen(
                     Icons.Outlined.CameraAlt,
                     contentDescription = null,
                     tint = HdTheme.colors.architectInk,
+                    modifier = Modifier.size(18.dp),
+                )
+            }
+            DockItem(
+                label = "Walk",
+                active = state.viewMode == EditorViewMode.Walk,
+                onClick = { viewModel.setViewMode(EditorViewMode.Walk) },
+            ) {
+                Icon(
+                    Icons.Outlined.DirectionsWalk,
+                    contentDescription = null,
+                    tint = if (state.viewMode == EditorViewMode.Walk) {
+                        HdTheme.colors.paper
+                    } else {
+                        HdTheme.colors.architectInk
+                    },
+                    modifier = Modifier.size(18.dp),
+                )
+            }
+            DockItem(
+                label = "Undo",
+                active = false,
+                onClick = { if (state.canUndo) viewModel.undo() },
+            ) {
+                Icon(
+                    Icons.AutoMirrored.Outlined.Undo,
+                    contentDescription = "Undo",
+                    tint = if (state.canUndo) {
+                        HdTheme.colors.architectInk
+                    } else {
+                        HdTheme.colors.architectGray
+                    },
+                    modifier = Modifier.size(18.dp),
+                )
+            }
+            DockItem(
+                label = "Redo",
+                active = false,
+                onClick = { if (state.canRedo) viewModel.redo() },
+            ) {
+                Icon(
+                    Icons.AutoMirrored.Outlined.Redo,
+                    contentDescription = "Redo",
+                    tint = if (state.canRedo) {
+                        HdTheme.colors.architectInk
+                    } else {
+                        HdTheme.colors.architectGray
+                    },
                     modifier = Modifier.size(18.dp),
                 )
             }
@@ -1262,47 +1284,53 @@ private fun TraceUnderlayCapsule(
     }
 }
 
+/** iOS EditorModeSwitchDeck — icon modes (2D / Split / 3D / AR). Walk lives on the dock. */
+@Composable
+private fun EditorModeIconSwitch(
+    selected: EditorViewMode,
+    onSelect: (EditorViewMode) -> Unit,
+    showSplit: Boolean = false,
+) {
+    data class ModeIcon(val mode: EditorViewMode, val icon: androidx.compose.ui.graphics.vector.ImageVector, val label: String)
+    val modes = buildList {
+        add(ModeIcon(EditorViewMode.Plan2D, Icons.Outlined.GridView, "2D"))
+        if (showSplit) add(ModeIcon(EditorViewMode.Split, Icons.Outlined.ViewQuilt, "Split"))
+        add(ModeIcon(EditorViewMode.View3D, Icons.Outlined.ViewInAr, "3D"))
+        add(ModeIcon(EditorViewMode.AR, Icons.Outlined.ViewInAr, "AR"))
+    }
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .clip(RoundedCornerShape(10.dp))
+            .background(HdTheme.colors.sand.copy(alpha = 0.7f))
+            .padding(3.dp),
+    ) {
+        modes.forEach { item ->
+            val active = selected == item.mode ||
+                (item.mode == EditorViewMode.View3D && selected == EditorViewMode.Walk)
+            Icon(
+                imageVector = item.icon,
+                contentDescription = item.label,
+                tint = if (active) HdTheme.colors.architectInk else HdTheme.colors.architectGray,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(7.dp))
+                    .background(if (active) HdTheme.colors.ivory else Color.Transparent)
+                    .clickable { onSelect(item.mode) }
+                    .padding(horizontal = 8.dp, vertical = 5.dp)
+                    .size(16.dp),
+            )
+        }
+    }
+}
+
 @Composable
 private fun ViewModeChips(
     selected: EditorViewMode,
     onSelect: (EditorViewMode) -> Unit,
     showSplit: Boolean = false,
 ) {
-    Row(
-        horizontalArrangement = Arrangement.spacedBy(2.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier
-            .padding(end = 4.dp)
-            .clip(RoundedCornerShape(10.dp))
-            .background(HdTheme.colors.highlight)
-            .padding(2.dp),
-    ) {
-        buildList {
-            add(EditorViewMode.Plan2D to "2D")
-            if (showSplit) add(EditorViewMode.Split to "Split")
-            add(EditorViewMode.View3D to "3D")
-            add(EditorViewMode.Walk to "Walk")
-            add(EditorViewMode.AR to "AR")
-        }.forEach { (mode, label) ->
-            val active = selected == mode
-            Text(
-                text = label,
-                style = HdTheme.typography.labelSmall,
-                color = if (active) HdTheme.colors.paper else HdTheme.colors.architectInk,
-                modifier = Modifier
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(
-                        when {
-                            active && mode != EditorViewMode.Plan2D -> HdTheme.colors.terracotta
-                            active -> HdTheme.colors.architectInk
-                            else -> Color.Transparent
-                        },
-                    )
-                    .clickable { onSelect(mode) }
-                    .padding(horizontal = 8.dp, vertical = 6.dp),
-            )
-        }
-    }
+    EditorModeIconSwitch(selected = selected, onSelect = onSelect, showSplit = showSplit)
 }
 
 @Composable
@@ -1400,29 +1428,30 @@ private fun DockItem(
     ink: Boolean = false,
     content: @Composable () -> Unit,
 ) {
+    // iOS dock buttons are ~42pt wide so seven tools fit a phone strip.
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier
-            .width(64.dp)
+            .width(46.dp)
             .clickable(onClick = onClick)
-            .padding(vertical = 4.dp),
+            .padding(vertical = 2.dp),
     ) {
         Box(
             modifier = Modifier
-                .size(40.dp)
-                .clip(CircleShape)
+                .size(width = 40.dp, height = 30.dp)
+                .clip(RoundedCornerShape(9.dp))
                 .background(
                     when {
                         ink -> HdTheme.colors.architectInk
                         active -> HdTheme.colors.selection
-                        else -> HdTheme.colors.highlight
+                        else -> Color.Transparent
                     },
                 ),
             contentAlignment = Alignment.Center,
         ) {
             content()
         }
-        Spacer(Modifier.height(4.dp))
+        Spacer(Modifier.height(3.dp))
         Text(label, style = HdTheme.typography.labelSmall, color = HdTheme.colors.architectGray)
     }
 }
