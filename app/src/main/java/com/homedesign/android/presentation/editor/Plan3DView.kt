@@ -150,7 +150,11 @@ class Plan3DSurfaceView @JvmOverloads constructor(
         TextureSampler.WrapMode.REPEAT,
     )
 
-    private data class DoorLeafEntity(val entity: Int, val leaf: DoorLeaf3D)
+    private data class DoorLeafEntity(
+        val entity: Int,
+        val leaf: DoorLeaf3D,
+        var openFrac: Float = if (leaf.isOpen) 1f else 0f,
+    )
     private val doorLeafEntities = ArrayList<DoorLeafEntity>()
 
     @Volatile var yawDeg = 45f
@@ -167,6 +171,8 @@ class Plan3DSurfaceView @JvmOverloads constructor(
     /** Walk look: yaw 0 = +Z, pitch 0 = horizon. */
     @Volatile private var lookYawDeg = 0f
     @Volatile private var lookPitchDeg = 0f
+    private var pendingWalkPose: WalkPose? = null
+    private var walkEyeInitialized = false
 
     /** Joystick / keyboard: forward (+1) and strafe right (+1), each in [-1, 1]. */
     @Volatile private var moveForward = 0f
@@ -177,7 +183,7 @@ class Plan3DSurfaceView @JvmOverloads constructor(
     @Volatile private var roofsEnabled = true
     @Volatile private var fenceEnabled = false
     private var groundAdded = false
-    private var doorAnimPhase = 0f
+
 
     private var sceneData: HomeScene3D? = null
     private var pendingHome: Home? = null
@@ -246,18 +252,42 @@ class Plan3DSurfaceView @JvmOverloads constructor(
         if (cameraMode == mode) return
         cameraMode = mode
         if (mode == Plan3DCameraMode.Walk) {
-            val s = sceneData
-            if (s != null) {
-                eyeX = s.centerX
-                eyeY = EYE_HEIGHT_M
-                eyeZ = s.centerZ
-            }
-            lookYawDeg = yawDeg
-            lookPitchDeg = 0f
+            walkEyeInitialized = false
+            applyWalkEye()
             moveForward = 0f
             moveStrafe = 0f
         }
         applyProjection()
+    }
+
+    /** Pegman pose in plan cm; applied when entering Walk (or immediately if already walking). */
+    fun setWalkPose(pose: WalkPose?) {
+        if (pendingWalkPose == pose) return
+        pendingWalkPose = pose
+        if (cameraMode == Plan3DCameraMode.Walk) {
+            walkEyeInitialized = false
+            applyWalkEye()
+        }
+    }
+
+    private fun applyWalkEye() {
+        val pose = pendingWalkPose
+        if (pose != null) {
+            eyeX = pose.eyeXMeters
+            eyeY = EYE_HEIGHT_M
+            eyeZ = pose.eyeZMeters
+            lookYawDeg = pose.yawDeg
+            lookPitchDeg = 0f
+            walkEyeInitialized = true
+            return
+        }
+        val s = sceneData ?: return
+        eyeX = s.centerX
+        eyeY = EYE_HEIGHT_M
+        eyeZ = s.centerZ
+        lookYawDeg = yawDeg
+        lookPitchDeg = 0f
+        walkEyeInitialized = true
     }
 
     fun setTimeOfDay(hour: Float) {
@@ -609,12 +639,10 @@ class Plan3DSurfaceView @JvmOverloads constructor(
         for (leaf in built.doorLeaves) {
             addDoorLeafEntity(eng, scn, mat, leaf)
         }
-        applyDoorTransforms(((sin(doorAnimPhase.toDouble()) + 1.0) * 0.5).toFloat())
+        applyDoorTransforms()
 
-        if (cameraMode == Plan3DCameraMode.Walk) {
-            eyeX = built.centerX
-            eyeY = EYE_HEIGHT_M
-            eyeZ = built.centerZ
+        if (cameraMode == Plan3DCameraMode.Walk && !walkEyeInitialized) {
+            applyWalkEye()
         }
     }
 
@@ -641,13 +669,13 @@ class Plan3DSurfaceView @JvmOverloads constructor(
         doorLeafEntities.add(DoorLeafEntity(entity, leaf))
     }
 
-    private fun applyDoorTransforms(openFraction: Float) {
+    private fun applyDoorTransforms() {
         val eng = engine ?: return
         val tcm = eng.transformManager
-        val frac = openFraction.coerceIn(0f, 1f)
         val m = FloatArray(16)
         for (item in doorLeafEntities) {
             val leaf = item.leaf
+            val frac = item.openFrac.coerceIn(0f, 1f)
             val yaw = leaf.closedYawRad + leaf.swingRad * frac
             val c = cos(yaw.toDouble()).toFloat()
             val s = sin(yaw.toDouble()).toFloat()
@@ -898,10 +926,12 @@ class Plan3DSurfaceView @JvmOverloads constructor(
         integrateWalk(dt)
 
         if (doorLeafEntities.isNotEmpty()) {
-            doorAnimPhase += dt * 0.7f
-            if (doorAnimPhase > 1_000f) doorAnimPhase -= 1_000f
-            val openFrac = ((sin(doorAnimPhase.toDouble()) + 1.0) * 0.5).toFloat()
-            applyDoorTransforms(openFrac)
+            // Ease each leaf toward open/closed from HomeDoorOrWindow.isOpen (sheet toggle).
+            for (item in doorLeafEntities) {
+                val target = if (item.leaf.isOpen) 1f else 0f
+                item.openFrac += (target - item.openFrac) * (dt * 4f).coerceIn(0f, 1f)
+            }
+            applyDoorTransforms()
         }
 
         if (s != null) {

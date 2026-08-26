@@ -138,6 +138,8 @@ fun PlanCanvas(
     additiveSelect: Boolean = false,
     /** One-shot fit to room/plan bounds (Stage this room). */
     cameraFocus: CameraFocusRequest? = null,
+    /** Pegman drop; drawn when set (circle + heading cone). */
+    walkPose: WalkPose? = null,
     onTap: (plan: Vec2, scalePxPerCm: Float, additive: Boolean) -> Unit,
     onDrawWallArm: (Vec2, Float) -> Unit,
     onDrawWallDrag: (Vec2, Float) -> Unit,
@@ -382,6 +384,7 @@ fun PlanCanvas(
                                 tool is EditorTool.PlaceFurniture ||
                                 tool is EditorTool.PlaceOpening ||
                                 tool is EditorTool.PlaceLabel ||
+                                tool is EditorTool.PlaceWalker ||
                                 tool is EditorTool.FormatPainter) && pastSlop -> {
                                 dragged = true
                                 panX += change.position.x - change.previousPosition.x
@@ -970,6 +973,10 @@ fun PlanCanvas(
             )
         }
 
+        walkPose?.let { pose ->
+            drawPegman(pose, planToScreen(pose.x, pose.y, scale), selectionColor)
+        }
+
         val guideDash = PathEffect.dashPathEffect(
             floatArrayOf(6f / max(scale, 0.001f), 4f / max(scale, 0.001f)),
             0f,
@@ -1173,6 +1180,29 @@ private fun classifySelectDrag(
         )
     }
     return SelectDragKind.Pan
+}
+
+private fun DrawScope.drawPegman(pose: WalkPose, pos: Offset, color: Color) {
+    val yaw = pose.angle
+    val fx = sin(yaw).toFloat()
+    val fy = cos(yaw).toFloat()
+    val coneLen = 34f
+    val half = Math.toRadians(28.0)
+    val c = cos(half).toFloat()
+    val s = sin(half).toFloat()
+    val r1x = fx * c - fy * s
+    val r1y = fx * s + fy * c
+    val r2x = fx * c + fy * s
+    val r2y = -fx * s + fy * c
+    val cone = Path().apply {
+        moveTo(pos.x, pos.y)
+        lineTo(pos.x + r1x * coneLen, pos.y + r1y * coneLen)
+        lineTo(pos.x + r2x * coneLen, pos.y + r2y * coneLen)
+        close()
+    }
+    drawPath(cone, color.copy(alpha = 0.22f))
+    drawCircle(color, radius = 6.5f, center = pos)
+    drawCircle(Color.White, radius = 6.5f, center = pos, style = Stroke(width = 2f))
 }
 
 private fun DrawScope.drawSashArc(

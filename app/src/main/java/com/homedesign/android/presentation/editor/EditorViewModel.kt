@@ -96,6 +96,7 @@ import com.homedesign.android.domain.geom.OpeningKind
 import com.homedesign.android.domain.geom.PlanAxis
 import com.homedesign.android.domain.geom.PlanRotation
 import com.homedesign.android.domain.geom.ResizeSide
+import com.homedesign.android.domain.geom.RoomContainment
 import com.homedesign.android.domain.geom.SnapEngine
 import com.homedesign.android.domain.geom.SnapTarget
 import com.homedesign.android.domain.geom.TRACE_DEFAULT_CM
@@ -126,6 +127,7 @@ import java.io.File
 import java.io.FileOutputStream
 import javax.inject.Inject
 import kotlin.math.PI
+import kotlin.math.atan2
 import kotlin.math.max
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -1055,7 +1057,49 @@ class EditorViewModel @Inject constructor(
             is EditorTool.PlaceOpening -> placeOpening(tool.kind, plan, scalePxPerCm)
             is EditorTool.FormatPainter -> onFormatPainterTap(plan, scalePxPerCm, tool.sourceWallID)
             EditorTool.PlaceLabel -> beginPlaceLabel(plan)
+            EditorTool.PlaceWalker -> placeWalker(plan)
         }
+    }
+
+    private fun placeWalker(plan: Vec2) {
+        val pose = WalkPose(x = plan.x, y = plan.y, angle = walkHeadingAt(plan))
+        document.setSelection(Selection.None)
+        Haptics.commit(appContext)
+        wallDrawStart = null
+        dimensionStart = null
+        _state.update {
+            it.copy(
+                walkPose = pose,
+                tool = EditorTool.Select,
+                viewMode = EditorViewMode.Walk,
+                selection = Selection.None,
+                preview = DrawPreview.None,
+                pendingLabelPoint = null,
+            )
+        }
+    }
+
+    /** Face the farthest corner of the containing room (iOS pegman drop). */
+    private fun walkHeadingAt(plan: Vec2): Double {
+        val level = document.home.selectedLevelID
+        val rooms = document.home.rooms.filter { level == null || it.level == level }
+        val room = rooms.firstOrNull { RoomContainment.pointInRoom(it, plan) } ?: return 0.0
+        var farX = plan.x
+        var farY = plan.y
+        var best = -1.0
+        for (p in room.points) {
+            val d2 = (p.x - plan.x) * (p.x - plan.x) + (p.y - plan.y) * (p.y - plan.y)
+            if (d2 > best) {
+                best = d2
+                farX = p.x
+                farY = p.y
+            }
+        }
+        val dx = farX - plan.x
+        val dy = farY - plan.y
+        if (best < 1e-9) return 0.0
+        // Walk yaw 0 = world +Z = plan +Y, so atan2(x, y).
+        return atan2(dx, dy)
     }
 
     private fun beginPlaceLabel(plan: Vec2) {

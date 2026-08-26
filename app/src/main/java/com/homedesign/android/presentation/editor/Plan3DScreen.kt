@@ -72,6 +72,7 @@ import kotlin.math.sqrt
 fun Plan3DScreen(
     home: Home,
     cameraMode: Plan3DCameraMode = Plan3DCameraMode.Orbit,
+    walkPose: WalkPose? = null,
     onBackToPlan: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -111,7 +112,8 @@ fun Plan3DScreen(
         }
     }
 
-    LaunchedEffect(cameraMode) {
+    LaunchedEffect(cameraMode, walkPose) {
+        filamentView?.setWalkPose(walkPose)
         filamentView?.setCameraMode(cameraMode)
         if (cameraMode != Plan3DCameraMode.Walk) {
             joyForward = 0f
@@ -182,12 +184,14 @@ fun Plan3DScreen(
                         view.setRoofsEnabled(roofs)
                         view.setFenceEnabled(fence)
                         view.setTimeOfDay(timeHour)
+                        view.setWalkPose(walkPose)
                         view.setCameraMode(cameraMode)
                         view.setHome(home)
                         view.onHostResume()
                     }
                 },
                 update = { view ->
+                    view.setWalkPose(walkPose)
                     view.setCameraMode(cameraMode)
                     view.setTimeOfDay(timeHour)
                     view.setOutdoorEnabled(outdoor)

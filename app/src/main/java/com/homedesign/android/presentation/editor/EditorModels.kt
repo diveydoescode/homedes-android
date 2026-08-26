@@ -21,6 +21,23 @@ sealed interface EditorTool {
     data class FormatPainter(val sourceWallID: String) : EditorTool
     /** Tap the plan, then type the annotation text. */
     data object PlaceLabel : EditorTool
+    /** Next tap drops the walkthrough pegman and enters Walk. */
+    data object PlaceWalker : EditorTool
+}
+
+/**
+ * First-person walk eye on the plan.
+ * [x]/[y] are plan cm (Y-down). [angle] is walk yaw in radians
+ * (0 looks along plan +Y / world +Z; world XZ = plan XY / 100).
+ */
+data class WalkPose(
+    val x: Double,
+    val y: Double,
+    val angle: Double,
+) {
+    val eyeXMeters: Float get() = (x * 0.01).toFloat()
+    val eyeZMeters: Float get() = (y * 0.01).toFloat()
+    val yawDeg: Float get() = Math.toDegrees(angle).toFloat()
 }
 
 /** One-shot plan camera fit request (Stage this room / Fit). */
@@ -119,4 +136,6 @@ data class EditorUiState(
     val cameraFocus: CameraFocusRequest? = null,
     /** Plan-cm point waiting for the New label dialog (PlaceLabel tool). */
     val pendingLabelPoint: Vec2? = null,
+    /** Last pegman drop; Walk camera starts here when set. */
+    val walkPose: WalkPose? = null,
 )

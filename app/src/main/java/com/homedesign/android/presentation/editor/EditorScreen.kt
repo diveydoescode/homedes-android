@@ -290,6 +290,7 @@ fun EditorScreen(
                     } else {
                         Plan3DCameraMode.Orbit
                     },
+                    walkPose = state.walkPose,
                     onBackToPlan = { viewModel.setViewMode(EditorViewMode.Plan2D) },
                     modifier = Modifier
                         .fillMaxSize()
@@ -333,6 +334,7 @@ fun EditorScreen(
                         ghostOtherLevels = state.ghostOtherLevels,
                         additiveSelect = additiveSelect,
                         cameraFocus = state.cameraFocus,
+                        walkPose = state.walkPose,
                         onTap = viewModel::onPlanTap,
                         onDrawWallArm = viewModel::onDrawWallArm,
                         onDrawWallDrag = viewModel::onDrawWallDrag,
@@ -372,6 +374,7 @@ fun EditorScreen(
                         Plan3DScreen(
                             home = state.home,
                             cameraMode = Plan3DCameraMode.Orbit,
+                            walkPose = state.walkPose,
                             onBackToPlan = { viewModel.setViewMode(EditorViewMode.Plan2D) },
                             modifier = Modifier.weight(1f).fillMaxHeight(),
                         )
@@ -381,6 +384,7 @@ fun EditorScreen(
                         Plan3DScreen(
                             home = state.home,
                             cameraMode = Plan3DCameraMode.Orbit,
+                            walkPose = state.walkPose,
                             onBackToPlan = { viewModel.setViewMode(EditorViewMode.Plan2D) },
                             modifier = Modifier.weight(0.45f).fillMaxWidth(),
                         )
@@ -404,6 +408,7 @@ fun EditorScreen(
                 ghostOtherLevels = state.ghostOtherLevels,
                 additiveSelect = additiveSelect,
                 cameraFocus = state.cameraFocus,
+                walkPose = state.walkPose,
                 onTap = viewModel::onPlanTap,
                 onDrawWallArm = viewModel::onDrawWallArm,
                 onDrawWallDrag = viewModel::onDrawWallDrag,
@@ -806,6 +811,16 @@ fun EditorScreen(
             )
         }
 
+        if (showPlanChrome && state.tool is EditorTool.PlaceWalker) {
+            PlaceWalkerBanner(
+                onCancel = { viewModel.setTool(EditorTool.Select) },
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .statusBarsPadding()
+                    .padding(top = TopChromeClearance),
+            )
+        }
+
         if (showPlanChrome && state.tool is EditorTool.FormatPainter) {
             FormatPainterBanner(
                 onCancel = { viewModel.setTool(EditorTool.Select) },
@@ -1043,6 +1058,10 @@ fun EditorScreen(
                     showAdd = false
                     viewModel.setTool(EditorTool.PlaceLabel)
                 },
+                onWalkHere = {
+                    showAdd = false
+                    viewModel.setTool(EditorTool.PlaceWalker)
+                },
                 onTrace = {
                     showAdd = false
                     pickTrace.launch("image/*")
@@ -1229,6 +1248,37 @@ private fun FloorSelectorButton(
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun PlaceWalkerBanner(
+    onCancel: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier
+            .clip(RoundedCornerShape(999.dp))
+            .background(HdTheme.colors.ivory.copy(alpha = 0.94f))
+            .border(1.dp, HdTheme.colors.hairline, RoundedCornerShape(999.dp))
+            .padding(horizontal = 12.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text(
+            text = "Tap plan to walk there",
+            style = HdTheme.typography.labelMedium,
+            color = HdTheme.colors.architectInk,
+        )
+        Text(
+            text = "Done",
+            style = HdTheme.typography.labelSmall,
+            color = HdTheme.colors.selectionDeep,
+            modifier = Modifier
+                .clip(RoundedCornerShape(999.dp))
+                .clickable(onClick = onCancel)
+                .padding(horizontal = 8.dp, vertical = 6.dp),
+        )
     }
 }
 
@@ -1479,6 +1529,7 @@ private fun AddSheetContent(
     onFurniture: () -> Unit,
     onPlaceStructure: (String) -> Unit,
     onPlaceLabel: () -> Unit,
+    onWalkHere: () -> Unit,
     onTrace: () -> Unit,
 ) {
     val intLabel = UnitFormat.length(interiorThicknessCM, unitSystem)
@@ -1528,6 +1579,7 @@ private fun AddSheetContent(
             onPlaceStructure(StructureCatalog.rugID)
         })
         SheetRow("Text label", "Tap the plan, then type", onPlaceLabel)
+        SheetRow("Walk here", "Tap the plan to stand there in first person", onWalkHere)
         SheetRow("Trace photo…", "Photo under the plan at 35% opacity", onTrace)
         Spacer(Modifier.height(16.dp))
     }
