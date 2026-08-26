@@ -1,6 +1,6 @@
 # HomeDesign Android — Resume State
 
-**Last updated:** 2026-08-26 (MCP device QA pass; editor phone chrome + Back handling)  
+**Last updated:** 2026-08-26 (Kyant Backdrop liquid glass + iOS New design sheet; AGP 9.1 toolchain)  
 **Repo:** https://github.com/diveydoescode/homedes-android (`main`)  
 **Local path:** `C:\webapp_android\homedes-android`  
 **Companion sources:**
@@ -312,3 +312,6 @@ Everything else in-repo is done or explicitly closed (incl. crown moulding — n
 - [x] **Editor phone chrome** — two-row top bar so title / floor / file stay visible; mode + units on second row  
 - [x] **Back handling** — dismiss Add/Catalog sheets, then clear selection, before leaving editor  
 - [x] **Script encoding** — ASCII-only ellipsis/em-dash in `install-launch.ps1` / `dev-up.ps1` / `ensure-emulator.ps1` (PowerShell parse break on Windows)  
+- [x] **Kyant Backdrop 2.0.1 liquid glass** — `core/ui/LiquidGlass.kt`; editor top strips + dock use `drawBackdrop` (API 33+), Material fallback below  
+- [x] **Toolchain for Backdrop 2** — Gradle 9.3.1, AGP 9.1.0, Kotlin 2.4.10 (built-in), KSP 2.3.11, Compose BOM 2026.08.00, compileSdk 37, Hilt 2.60.1  
+- [x] **iOS New design sheet** — Blank floor plan / From a sketch / From a template (+ template sub-sheet for showcase/sample/imports)  
