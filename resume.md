@@ -1,13 +1,19 @@
 # HomeDesign Android — Resume State
 
-**Last updated:** 2026-08-26 (Phase 1 iOS↔Android 2D parity: DXF R2018, PDF, wall drag, clipboard, ortho)  
+**Last updated:** 2026-08-26 (session pause — save UI photo pass + SF icons + infinite canvas; continue from §12)  
 **Repo:** https://github.com/diveydoescode/homedes-android (`main`)  
+**HEAD tip (at save):** `07e7f54` — `fix(canvas): infinite plan pan like iOS viewport grid`  
 **Local path:** `C:\webapp_android\homedes-android`  
 **Companion sources:**
 - Web (Stage 1 oracle): `C:\webapp_android\homedes-webapp` → https://github.com/diveydoescode/homedes-webapp
 - iOS (UI / full-product reference): `C:\webapp_android\homedesign-ios` → https://github.com/diveydoescode/homedesign
+- **Live iOS device screenshots (SoT for visual polish):** `C:\webapp_android\ios-photos-ui\` (18 PNGs). Also copied locally under `artifacts/ios-photos-ui/` (gitignored). Checklist: `docs/IOS_PHOTOS_UI_PASS.md`
 
 When the user says **“read resume.md”**, treat this file as the source of truth for progress, scope, and next work. Do not re-analyze from scratch unless something here conflicts with the tree.
+
+### Resume prompt (copy-paste)
+
+> Read `C:\webapp_android\homedes-android\resume.md` and `docs/IOS_PHOTOS_UI_PASS.md`. **First** §0 MCP session start. Then continue **§12 priority 0 — Device photo UI pass** (do not re-do SF icon import or Phase 1 2D). Photos: `C:\webapp_android\ios-photos-ui\`.
 
 ---
 
@@ -40,7 +46,7 @@ Also see `AGENTS.md` and `README.md` → “Agent auto-launch”.
 4. Sketch convert talks to Vercel proxy (no API key in the app): default `https://homedes-webapp.vercel.app`.
 5. Stack (mandatory): Kotlin, Compose + Material 3, Clean Architecture + MVVM, Navigation Compose, Retrofit + OkHttp + Kotlin Serialization, Hilt, Room + DataStore, Coil, Coroutines/Flow, minSdk 26, targetSdk 35.
 
-**User clarification:** they want full conversion / working features; “same level as iOS” is a later horizon. Close **web Stage 1** first, then iOS 2D chrome, then 3D/AR.
+**User clarification (evolved):** Stage 1 web parity is done. User now wants **editor + dashboard UI one-to-one with iOS** (SF icons already; next = pixel polish from `ios-photos-ui`). Then remaining 3D/AR functional gaps.
 
 ---
 
@@ -93,7 +99,7 @@ app/src/main/java/com/homedesign/android/
 |--------|----------------|
 | App runs, basic edit/save | **Done** |
 | = web Stage 1 (`homedes-webapp`) | **~100%** (app parity; live Vercel `/api/sketch` deploy is external — see §12) |
-| = full iOS (`homedesign`) | **~93–95%** (Phase 1 2D editor + PDF/DXF largely at iOS level; left: mesh pack, live Vercel sketch, squaring/marquee polish, UI designer pass) |
+| = full iOS (`homedesign`) | **~94–96%** function; **UI chrome ~90%** — SF icons + glass deck shipped; **pixel polish vs `ios-photos-ui/` still open** (Continue row, New design title, 3D floor chip, catalog title, lighting sheet). Mesh pack + Vercel sketch still external. |
 
 ---
 
@@ -297,11 +303,12 @@ Everything else in-repo is done or explicitly closed (incl. crown moulding — n
 
 | Priority | Item | Notes |
 |----------|------|--------|
+| **0** | **Device photo UI pass (IN PROGRESS — do this next)** | User pointed at `C:\webapp_android\ios-photos-ui\`. Spec: `docs/IOS_PHOTOS_UI_PASS.md`. **Not started in code** (agent paused mid-audit). Implement vs photos: (1) New design: serif “New” + italic “design”, paper icon tiles; (2) Continue hero: Continue LEFT + `arrow.right` RIGHT same row; (3) Blue circular floor chip on **3D pane** top-trailing (FloorSelectorButton exists unused); (4) Catalog title “Add Furniture” + Cancel; (5) optional Lighting sheet + MEASURE eyebrow on furniture props. MCP-verify against photos. |
 | 1 | **Catalog-library 3D meshes without SH3D** | **Deferred** — user will supply a mesh pack. Procedural / structure primitives remain until then. |
 | 2 | **Vercel `/api/sketch` deploy** | **Blocked here (no Vercel access).** Docs: `docs/SKETCH_VERCEL_DEPLOY.md` + webapp `DEPLOY.md`. Live origin still 404 until ops deploys. |
-| 3 | **iOS functional parity leftovers** | Mostly 3D/AR: Stage room lighting, AR drag+D-pad+1:1, Filament point lights, roof styles, opening dressings. **Phase 1 2D** (walls/openings/place/sketch/PDF/DXF) largely Done — see `docs/PHASE1_IOS_ANDROID_2D_GAP.md`. Tiny 2D leftovers: WallSquaring banner, marquee tool, DXF SVG furniture art. |
+| 3 | **iOS functional parity leftovers** | Mostly 3D/AR: Stage room lighting UI (photo IMG_9197), AR drag+D-pad+1:1, Filament point lights, roof styles, opening dressings. **Phase 1 2D** largely Done — `docs/PHASE1_IOS_ANDROID_2D_GAP.md`. Tiny 2D leftovers: WallSquaring banner, marquee tool, DXF SVG furniture art. |
 | 4 | **Device QA follow-ups** | Draw-wall chain, openings slide/resize, furniture stamp, export share, AR on real device, sketch mock E2E, structure/label smoke. |
-| 5 | **UI designer pass** | Handoff zip: `artifacts/ui-designer-handoff.zip` — await annotated guidelines for pixel-identical chrome. |
+| 5 | **UI designer zip** | `artifacts/ui-designer-handoff.zip` — superseded for now by live `ios-photos-ui` photos as visual SoT. |
 
 ### Done recently (do not redo)
 
@@ -326,3 +333,31 @@ Everything else in-repo is done or explicitly closed (incl. crown moulding — n
 - [x] **Pegman / Walk here** — Add → Walk here → tap plan; dock Walk uses pose  
 - [x] **Door Open/Close** — sheet toggle drives Filament leaf angle (no sine loop)  
 - [x] **Phase 1 2D iOS parity** — gap matrix `docs/PHASE1_IOS_ANDROID_2D_GAP.md`; PDF mitered/labels; DXF R2018+hatch+BLOCKS; wall endpoint/body drag; opening clipboard; wall-sheet dims; ortho lock; label drag/rename; custom furniture box; MCP export QA (Villa Bianca PDF/DXF)  
+- [x] **Editor chrome → iOS Deck** — 7-slot dock; Ortho/Int/Ext as context chips; Plan2D chip; glass elevation; Add sheet sections WALLS/OPENINGS/FURNITURE/STRUCTURE/ANNOTATE (`de72f41`)  
+- [x] **1:1 SF Symbol icons (editor)** — `HdSfIcons` + `res/drawable/sf_*.xml` (~50+ vectors from SF Symbols); DeleteToastPill; PlanToolRail; phone property peeks (`c3557f0`)  
+- [x] **1:1 SF Symbol icons (dashboard / New design / sketch / journey)** — search, FAB, showcase houses, New design trio icons, sketch camera/photo (`06c4d3f`)  
+- [x] **Infinite plan pan** — grid from visible viewport bounds like iOS `visiblePlanBounds` (`07e7f54`)  
+- [ ] **Device photo UI pass** — **NEXT**; photos at `C:\webapp_android\ios-photos-ui\`; see §12 priority 0 + `docs/IOS_PHOTOS_UI_PASS.md`  
+
+### Key paths for next agent
+
+| Path | Why |
+|------|-----|
+| `docs/IOS_PHOTOS_UI_PASS.md` | Photo → surface checklist |
+| `C:\webapp_android\ios-photos-ui\` | Live iOS screenshots (SoT) |
+| `app/.../presentation/dashboard/DashboardScreen.kt` | New design sheet + Continue hero |
+| `app/.../presentation/editor/EditorScreen.kt` / `Plan3DScreen.kt` | Floor chip on 3D |
+| `app/.../presentation/editor/FurniturePickerSheet.kt` | “Add Furniture” + Cancel |
+| `app/.../core/ui/HdSfIcons.kt` + `res/drawable/sf_*.xml` | Do not re-export SF icons unless a symbol is missing |
+| `docs/PHASE1_IOS_ANDROID_2D_GAP.md` | Phase 1 2D gap matrix (largely closed) |
+| `docs/EDITOR_UI_IOS_AUDIT.md` | Earlier chrome audit |
+
+### Git commits this session (newest first)
+
+| SHA | Subject |
+|-----|---------|
+| `07e7f54` | fix(canvas): infinite plan pan like iOS viewport grid |
+| `06c4d3f` | feat(ui): 1:1 SF Symbols on dashboard, New design, sketch |
+| `c3557f0` | feat(ui): 1:1 SF Symbol icons + iOS editor chrome finish |
+| `de72f41` | feat(ui): port editor chrome closer to iOS Deck + liquid glass |
+| `07068b4` | feat(export): match iOS/web PlanDXF + PlanPDF geometry |
