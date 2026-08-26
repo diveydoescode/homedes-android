@@ -23,7 +23,9 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -39,6 +41,7 @@ import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.DirectionsWalk
 import androidx.compose.material.icons.outlined.GridView
 import androidx.compose.material.icons.outlined.IosShare
+import androidx.compose.material.icons.outlined.KeyboardArrowDown
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.ViewInAr
 import androidx.compose.material.icons.outlined.Weekend
@@ -71,6 +74,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -98,6 +102,9 @@ import com.homedesign.android.core.ui.hdGlassCapsule
 import com.homedesign.android.core.ui.hdGlassChrome
 import com.homedesign.android.core.ui.hdLayerBackdrop
 import com.homedesign.android.core.ui.rememberHdLayerBackdrop
+import com.homedesign.android.core.ui.theme.HdMono
+import com.homedesign.android.core.ui.theme.HdSans
+import com.homedesign.android.core.ui.theme.HdSerif
 import com.homedesign.android.core.ui.theme.HdTheme
 import com.homedesign.android.domain.catalog.StructureCatalog
 import com.homedesign.android.domain.catalog.catalogById
@@ -478,32 +485,47 @@ fun EditorScreen(
                 .padding(horizontal = 8.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            IconButton(onClick = {
-                viewModel.flushSave()
-                onBack()
-            }) {
+            IconButton(
+                onClick = {
+                    viewModel.flushSave()
+                    onBack()
+                },
+                modifier = Modifier.size(36.dp),
+            ) {
                 Icon(
                     Icons.AutoMirrored.Outlined.ArrowBack,
                     contentDescription = "Back to designs",
                     tint = HdTheme.colors.architectInk,
                 )
             }
-            Column(modifier = Modifier.weight(1f)) {
+            // iOS Deck title stack — fixed band so chrome controls cannot crush it to 0 width
+            Column(
+                modifier = Modifier
+                    .widthIn(min = 88.dp, max = 160.dp)
+                    .padding(end = 6.dp),
+            ) {
                 Text(
                     text = state.title.ifBlank { "Untitled" },
-                    style = HdTheme.typography.titleMedium,
                     color = HdTheme.colors.architectInk,
+                    fontFamily = HdSerif,
+                    fontWeight = FontWeight.Medium,
+                    fontSize = 16.sp,
+                    lineHeight = 20.sp,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
                 Text(
                     text = state.savedLabel,
-                    style = HdTheme.typography.labelSmall,
                     color = HdTheme.colors.architectGray,
+                    fontFamily = HdMono,
+                    fontWeight = FontWeight.Normal,
+                    fontSize = 9.5.sp,
+                    lineHeight = 12.sp,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
             }
+            Spacer(Modifier.weight(1f))
             if (showPlanChrome) {
                 UnitSystemChips(
                     selected = state.unitSystem,
@@ -516,19 +538,27 @@ fun EditorScreen(
                 onSelect = viewModel::setViewMode,
                 showSplit = true,
             )
-            IconButton(onClick = { viewModel.exportPdf() }) {
+            IconButton(
+                onClick = { viewModel.exportPdf() },
+                modifier = Modifier.size(36.dp),
+            ) {
                 Icon(
                     Icons.Outlined.IosShare,
                     contentDescription = "Share or export",
                     tint = HdTheme.colors.architectInk,
+                    modifier = Modifier.size(18.dp),
                 )
             }
             Box {
-                IconButton(onClick = { exportOpen = true }) {
+                IconButton(
+                    onClick = { exportOpen = true },
+                    modifier = Modifier.size(36.dp),
+                ) {
                     Icon(
                         Icons.Outlined.MoreVert,
                         contentDescription = "More",
                         tint = HdTheme.colors.architectInk,
+                        modifier = Modifier.size(18.dp),
                     )
                 }
                 DropdownMenu(expanded = exportOpen, onDismissRequest = { exportOpen = false }) {
@@ -624,17 +654,42 @@ fun EditorScreen(
                     )
                 }
             }
-            // Floor selector sits in overflow-adjacent slot on the strip when space allows.
-            FloorSelectorButton(
-                levels = state.home.levels,
-                selectedLevelID = state.home.selectedLevelID,
-                ghostOtherLevels = state.ghostOtherLevels,
-                menuOpen = floorMenuOpen,
-                onMenuOpenChange = { floorMenuOpen = it },
-                onSelectLevel = viewModel::selectLevel,
-                onAddFloor = viewModel::addFloorOnTop,
-                onToggleGhost = viewModel::toggleGhostOtherLevels,
-            )
+            // Floors: overflow "Floors…" opens the same menu (keeps title visible on phone).
+            DropdownMenu(expanded = floorMenuOpen, onDismissRequest = { floorMenuOpen = false }) {
+                state.home.levels.forEach { level ->
+                    DropdownMenuItem(
+                        text = {
+                            Text(
+                                level.name?.takeIf { it.isNotBlank() }
+                                    ?: LevelMutation.elevatorLabel(level),
+                            )
+                        },
+                        onClick = {
+                            floorMenuOpen = false
+                            viewModel.selectLevel(level.id)
+                        },
+                    )
+                }
+                HorizontalDivider()
+                DropdownMenuItem(
+                    text = { Text("Add floor on top") },
+                    onClick = {
+                        floorMenuOpen = false
+                        viewModel.addFloorOnTop()
+                    },
+                )
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            if (state.ghostOtherLevels) "Hide other floors" else "Ghost other floors",
+                        )
+                    },
+                    onClick = {
+                        floorMenuOpen = false
+                        viewModel.toggleGhostOtherLevels()
+                    },
+                )
+            }
         }
 
         if (showPlanChrome &&
@@ -665,153 +720,145 @@ fun EditorScreen(
             }
         }
 
-        if (showPlanChrome) Row(
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .fillMaxWidth()
-                .navigationBarsPadding()
-                .padding(horizontal = 10.dp)
-                .padding(bottom = 16.dp)
-                .hdGlassCapsule(
-                    backdrop = glassBackdrop,
-                    fallbackFill = HdTheme.colors.ivory.copy(alpha = 0.94f),
-                )
-                .padding(horizontal = 6.dp, vertical = 7.dp),
-            horizontalArrangement = Arrangement.SpaceEvenly,
-            verticalAlignment = Alignment.Top,
-        ) {
-            // iOS EditorDock: Edit⇄Measure · Add · Catalog · Sketch · Walk · Undo · Redo
-            val measure = state.tool is EditorTool.Dimension
-            DockItem(
-                label = if (measure) "Measure" else "Edit",
-                active = measure,
-                onClick = {
-                    if (measure) viewModel.setTool(EditorTool.Select)
-                    else viewModel.setTool(EditorTool.Dimension)
-                },
+        if (showPlanChrome) {
+            // iOS: Ortho + draw thickness live as canvas overlays, not dock peers.
+            Column(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .navigationBarsPadding()
+                    .padding(horizontal = 12.dp)
+                    .padding(bottom = 6.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                Icon(
-                    if (measure) Icons.Outlined.Straighten else Icons.Outlined.GridView,
-                    contentDescription = null,
-                    tint = if (measure) HdTheme.colors.paper else HdTheme.colors.architectInk,
-                    modifier = Modifier.size(18.dp),
+                EditorContextChipsRow(
+                    drawWall = state.tool as? EditorTool.DrawWall,
+                    orthoLock = state.orthoLock,
+                    unitSystem = state.unitSystem,
+                    onInterior = { viewModel.setTool(EditorTool.DrawWall(interiorThicknessCM)) },
+                    onExterior = { viewModel.setTool(EditorTool.DrawWall(exteriorThicknessCM)) },
+                    onToggleOrtho = viewModel::toggleOrthoLock,
+                    glassBackdrop = glassBackdrop,
                 )
-            }
-            if (state.tool is EditorTool.DrawWall) {
-                val thickness = (state.tool as EditorTool.DrawWall).thickness
-                DockItem(
-                    label = "Int",
-                    active = kotlin.math.abs(thickness - interiorThicknessCM) < 0.1,
-                    onClick = { viewModel.setTool(EditorTool.DrawWall(interiorThicknessCM)) },
+                Spacer(Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .hdGlassCapsule(
+                            backdrop = glassBackdrop,
+                            fallbackFill = HdTheme.colors.ivory.copy(alpha = 0.94f),
+                        )
+                        .padding(horizontal = 8.dp, vertical = 7.dp),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                    verticalAlignment = Alignment.Top,
                 ) {
-                    Text(
-                        UnitFormat.length(interiorThicknessCM, state.unitSystem),
-                        color = HdTheme.colors.architectInk,
-                        style = HdTheme.typography.labelSmall,
-                    )
+                    // iOS EditorDock: Edit⇄Measure · Add · Catalog · Sketch · Walk · Undo · Redo
+                    val measure = state.tool is EditorTool.Dimension
+                    DockItem(
+                        label = if (measure) "Measure" else "Edit",
+                        active = measure,
+                        onClick = {
+                            if (measure) viewModel.setTool(EditorTool.Select)
+                            else viewModel.setTool(EditorTool.Dimension)
+                        },
+                    ) {
+                        Icon(
+                            if (measure) Icons.Outlined.Straighten else Icons.Outlined.GridView,
+                            contentDescription = null,
+                            tint = if (measure) HdTheme.colors.paper else HdTheme.colors.architectInk,
+                            modifier = Modifier.size(17.dp),
+                        )
+                    }
+                    DockItem(
+                        label = "Add",
+                        ink = true,
+                        chevron = true,
+                        onClick = { showAdd = true },
+                    ) {
+                        Icon(
+                            Icons.Outlined.Add,
+                            contentDescription = null,
+                            tint = HdTheme.colors.paper,
+                            modifier = Modifier.size(17.dp),
+                        )
+                    }
+                    DockItem(
+                        label = "Catalog",
+                        active = state.tool is EditorTool.PlaceFurniture,
+                        onClick = { showCatalog = true },
+                    ) {
+                        Icon(
+                            Icons.Outlined.Weekend,
+                            contentDescription = null,
+                            tint = HdTheme.colors.architectInk,
+                            modifier = Modifier.size(17.dp),
+                        )
+                    }
+                    DockItem(
+                        label = "Sketch",
+                        badge = "AI",
+                        onClick = {
+                            viewModel.flushSave()
+                            onOpenSketch()
+                        },
+                    ) {
+                        Icon(
+                            Icons.Outlined.CameraAlt,
+                            contentDescription = null,
+                            tint = HdTheme.colors.architectInk,
+                            modifier = Modifier.size(17.dp),
+                        )
+                    }
+                    DockItem(
+                        label = "Walk",
+                        active = state.viewMode == EditorViewMode.Walk,
+                        onClick = { viewModel.setViewMode(EditorViewMode.Walk) },
+                    ) {
+                        Icon(
+                            Icons.Outlined.DirectionsWalk,
+                            contentDescription = null,
+                            tint = if (state.viewMode == EditorViewMode.Walk) {
+                                HdTheme.colors.paper
+                            } else {
+                                HdTheme.colors.architectInk
+                            },
+                            modifier = Modifier.size(17.dp),
+                        )
+                    }
+                    DockItem(
+                        label = "Undo",
+                        disabled = !state.canUndo,
+                        onClick = { if (state.canUndo) viewModel.undo() },
+                    ) {
+                        Icon(
+                            Icons.AutoMirrored.Outlined.Undo,
+                            contentDescription = "Undo",
+                            tint = HdTheme.colors.architectInk,
+                            modifier = Modifier.size(17.dp),
+                        )
+                    }
+                    DockItem(
+                        label = "Redo",
+                        disabled = !state.canRedo,
+                        onClick = { if (state.canRedo) viewModel.redo() },
+                    ) {
+                        Icon(
+                            Icons.AutoMirrored.Outlined.Redo,
+                            contentDescription = "Redo",
+                            tint = HdTheme.colors.architectInk,
+                            modifier = Modifier.size(17.dp),
+                        )
+                    }
                 }
-                DockItem(
-                    label = "Ext",
-                    active = kotlin.math.abs(thickness - exteriorThicknessCM) < 0.1,
-                    onClick = { viewModel.setTool(EditorTool.DrawWall(exteriorThicknessCM)) },
-                ) {
-                    Text(
-                        UnitFormat.length(exteriorThicknessCM, state.unitSystem),
-                        color = HdTheme.colors.architectInk,
-                        style = HdTheme.typography.labelSmall,
-                    )
-                }
             }
-            DockItem(
-                label = "Ortho",
-                active = state.orthoLock,
-                onClick = viewModel::toggleOrthoLock,
-            ) {
-                Text(
-                    if (state.orthoLock) "45°" else "Free",
-                    color = if (state.orthoLock) HdTheme.colors.paper else HdTheme.colors.architectInk,
-                    style = HdTheme.typography.labelSmall,
-                )
-            }
-            DockItem(label = "Add", ink = true, onClick = { showAdd = true }) {
-                Icon(
-                    Icons.Outlined.Add,
-                    contentDescription = null,
-                    tint = HdTheme.colors.paper,
-                    modifier = Modifier.size(18.dp),
-                )
-            }
-            DockItem(
-                label = "Catalog",
-                active = state.tool is EditorTool.PlaceFurniture,
-                onClick = { showCatalog = true },
-            ) {
-                Icon(
-                    Icons.Outlined.Weekend,
-                    contentDescription = null,
-                    tint = HdTheme.colors.architectInk,
-                    modifier = Modifier.size(18.dp),
-                )
-            }
-            DockItem(label = "Sketch", onClick = {
-                viewModel.flushSave()
-                onOpenSketch()
-            }) {
-                Icon(
-                    Icons.Outlined.CameraAlt,
-                    contentDescription = null,
-                    tint = HdTheme.colors.architectInk,
-                    modifier = Modifier.size(18.dp),
-                )
-            }
-            DockItem(
-                label = "Walk",
-                active = state.viewMode == EditorViewMode.Walk,
-                onClick = { viewModel.setViewMode(EditorViewMode.Walk) },
-            ) {
-                Icon(
-                    Icons.Outlined.DirectionsWalk,
-                    contentDescription = null,
-                    tint = if (state.viewMode == EditorViewMode.Walk) {
-                        HdTheme.colors.paper
-                    } else {
-                        HdTheme.colors.architectInk
-                    },
-                    modifier = Modifier.size(18.dp),
-                )
-            }
-            DockItem(
-                label = "Undo",
-                active = false,
-                onClick = { if (state.canUndo) viewModel.undo() },
-            ) {
-                Icon(
-                    Icons.AutoMirrored.Outlined.Undo,
-                    contentDescription = "Undo",
-                    tint = if (state.canUndo) {
-                        HdTheme.colors.architectInk
-                    } else {
-                        HdTheme.colors.architectGray
-                    },
-                    modifier = Modifier.size(18.dp),
-                )
-            }
-            DockItem(
-                label = "Redo",
-                active = false,
-                onClick = { if (state.canRedo) viewModel.redo() },
-            ) {
-                Icon(
-                    Icons.AutoMirrored.Outlined.Redo,
-                    contentDescription = "Redo",
-                    tint = if (state.canRedo) {
-                        HdTheme.colors.architectInk
-                    } else {
-                        HdTheme.colors.architectGray
-                    },
-                    modifier = Modifier.size(18.dp),
-                )
-            }
+
+            Plan2DModeChip(
+                measuring = state.tool is EditorTool.Dimension,
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .statusBarsPadding()
+                    .padding(start = 10.dp, top = TopChromeClearance),
+            )
         }
 
         if (showPlanChrome && placeTool != null) {
@@ -1571,17 +1618,26 @@ private fun EditorModeIconSwitch(
         modes.forEach { item ->
             val active = selected == item.mode ||
                 (item.mode == EditorViewMode.View3D && selected == EditorViewMode.Walk)
-            Icon(
-                imageVector = item.icon,
-                contentDescription = item.label,
-                tint = if (active) HdTheme.colors.architectInk else HdTheme.colors.architectGray,
+            Box(
+                contentAlignment = Alignment.Center,
                 modifier = Modifier
+                    .size(width = 34.dp, height = 26.dp)
                     .clip(RoundedCornerShape(7.dp))
                     .background(if (active) HdTheme.colors.ivory else Color.Transparent)
-                    .clickable { onSelect(item.mode) }
-                    .padding(horizontal = 8.dp, vertical = 5.dp)
-                    .size(16.dp),
-            )
+                    .border(
+                        width = if (active) 0.5.dp else 0.dp,
+                        color = HdTheme.colors.hairline,
+                        shape = RoundedCornerShape(7.dp),
+                    )
+                    .clickable { onSelect(item.mode) },
+            ) {
+                Icon(
+                    imageVector = item.icon,
+                    contentDescription = item.label,
+                    tint = if (active) HdTheme.colors.architectInk else HdTheme.colors.architectGray,
+                    modifier = Modifier.size(14.dp),
+                )
+            }
         }
     }
 }
@@ -1600,12 +1656,13 @@ private fun UnitSystemChips(
     selected: UnitSystem,
     onSelect: (UnitSystem) -> Unit,
 ) {
+    // iOS EditorUnitsToggle — mono 12, 26×24 segments, ink@7% capsule track
     Row(
-        horizontalArrangement = Arrangement.spacedBy(2.dp),
+        horizontalArrangement = Arrangement.spacedBy(0.dp),
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
-            .clip(RoundedCornerShape(10.dp))
-            .background(HdTheme.colors.highlight)
+            .clip(RoundedCornerShape(999.dp))
+            .background(HdTheme.colors.architectInk.copy(alpha = 0.07f))
             .padding(2.dp),
     ) {
         listOf(
@@ -1616,16 +1673,117 @@ private fun UnitSystemChips(
             val active = selected == system
             Text(
                 text = label,
-                style = HdTheme.typography.labelSmall,
                 color = if (active) HdTheme.colors.paper else HdTheme.colors.architectInk,
+                fontFamily = HdMono,
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 12.sp,
+                textAlign = TextAlign.Center,
                 modifier = Modifier
-                    .clip(RoundedCornerShape(8.dp))
+                    .width(26.dp)
+                    .height(24.dp)
+                    .clip(RoundedCornerShape(999.dp))
                     .background(if (active) HdTheme.colors.architectInk else Color.Transparent)
                     .clickable { onSelect(system) }
-                    .padding(horizontal = 8.dp, vertical = 6.dp),
+                    .wrapContentHeight(Alignment.CenterVertically),
             )
         }
     }
+}
+
+/** iOS Plan2DChips — top-leading mode pill. */
+@Composable
+private fun Plan2DModeChip(
+    measuring: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    val label = if (measuring) "2D · DIMENSION" else "2D · PLAN"
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        modifier = modifier
+            .clip(RoundedCornerShape(999.dp))
+            .background(HdTheme.colors.ivory.copy(alpha = 0.90f))
+            .border(0.5.dp, HdTheme.colors.hairline, RoundedCornerShape(999.dp))
+            .padding(horizontal = 10.dp, vertical = 6.dp),
+    ) {
+        Box(
+            modifier = Modifier
+                .size(6.dp)
+                .clip(CircleShape)
+                .background(HdTheme.colors.selection),
+        )
+        Text(
+            text = label,
+            color = HdTheme.colors.architectInk,
+            fontFamily = HdMono,
+            fontWeight = FontWeight.Medium,
+            fontSize = 10.sp,
+            letterSpacing = 1.sp,
+        )
+    }
+}
+
+/** Ortho + Interior/Exterior thickness — iOS drawOptionsBar / ortho rail. */
+@Composable
+private fun EditorContextChipsRow(
+    drawWall: EditorTool.DrawWall?,
+    orthoLock: Boolean,
+    unitSystem: UnitSystem,
+    onInterior: () -> Unit,
+    onExterior: () -> Unit,
+    onToggleOrtho: () -> Unit,
+    glassBackdrop: com.kyant.backdrop.Backdrop?,
+) {
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .hdGlassCapsule(
+                backdrop = glassBackdrop,
+                fallbackFill = HdTheme.colors.ivory.copy(alpha = 0.94f),
+            )
+            .padding(horizontal = 10.dp, vertical = 6.dp),
+    ) {
+        if (drawWall != null) {
+            val intActive = kotlin.math.abs(drawWall.thickness - interiorThicknessCM) < 0.1
+            val extActive = kotlin.math.abs(drawWall.thickness - exteriorThicknessCM) < 0.1
+            ContextChip(
+                label = "Interior ${UnitFormat.length(interiorThicknessCM, unitSystem)}",
+                active = intActive,
+                onClick = onInterior,
+            )
+            ContextChip(
+                label = "Exterior ${UnitFormat.length(exteriorThicknessCM, unitSystem)}",
+                active = extActive,
+                onClick = onExterior,
+            )
+        }
+        ContextChip(
+            label = if (orthoLock) "Ortho 45°" else "Ortho free",
+            active = orthoLock,
+            onClick = onToggleOrtho,
+        )
+    }
+}
+
+@Composable
+private fun ContextChip(
+    label: String,
+    active: Boolean,
+    onClick: () -> Unit,
+) {
+    Text(
+        text = label,
+        color = if (active) HdTheme.colors.paper else HdTheme.colors.architectInk,
+        fontFamily = HdSans,
+        fontWeight = FontWeight.SemiBold,
+        fontSize = 11.sp,
+        modifier = Modifier
+            .clip(RoundedCornerShape(999.dp))
+            .background(if (active) HdTheme.colors.selection else Color.Transparent)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 10.dp, vertical = 5.dp),
+    )
 }
 
 @Composable
@@ -1651,68 +1809,98 @@ private fun AddSheetContent(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 20.dp, vertical = 8.dp)
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 16.dp, vertical = 8.dp)
             .navigationBarsPadding(),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Text("Add", style = HdTheme.typography.titleLarge, color = HdTheme.colors.ink)
-        SheetRow("Interior wall · $intLabel", "Tap start, tap end; tap again to finish", onDrawWallInterior)
-        SheetRow("Exterior wall · $extLabel", "Tap start, tap end; tap again to finish", onDrawWallExterior)
-        SheetRow("Room", "Drag a rectangle", onDrawRoom)
-        SheetRow("Custom furniture", "Drag a box on the plan, then name it", onDrawFurnitureBox)
-        SheetRow("Door", "Tap a wall to insert", onDoor)
-        SheetRow("Window", "Tap a wall to insert", onWindow)
-        SheetRow("French door", "Tap a wall to insert", onFrench)
-        SheetRow("Dimension", "Tap two points", onDimension)
-        SheetRow("Exterior dims", "Auto-chain outer face dimensions for this level", onExteriorDims)
-        SheetRow("Furniture…", "Pick from the catalog", onFurniture)
         Text(
-            "Structure",
-            style = HdTheme.typography.titleSmall,
-            color = HdTheme.colors.ink,
-            modifier = Modifier.padding(top = 8.dp),
+            "Add",
+            style = HdTheme.typography.titleLarge,
+            color = HdTheme.colors.architectInk,
+            modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp),
         )
-        SheetRow("Round pillar", "Floor to ceiling · tap to place", {
-            onPlaceStructure(StructureCatalog.pillarRoundID)
-        })
-        SheetRow("Square pillar", "Floor to ceiling · tap to place", {
-            onPlaceStructure(StructureCatalog.pillarSquareID)
-        })
-        SheetRow("Ceiling beam", "Hangs at the ceiling · tap to place", {
-            onPlaceStructure(StructureCatalog.beamID)
-        })
-        SheetRow("Wall mirror", "Wall-hung · tap to place", {
-            onPlaceStructure(StructureCatalog.mirrorID)
-        })
-        SheetRow("Garden path", "Floor · tap to place", {
-            onPlaceStructure(StructureCatalog.pathID)
-        })
-        SheetRow("Railing", "Floor · tap to place", {
-            onPlaceStructure(StructureCatalog.railingID)
-        })
-        SheetRow("Rug", "Floor · tap to place", {
-            onPlaceStructure(StructureCatalog.rugID)
-        })
-        SheetRow("Text label", "Tap the plan, then type", onPlaceLabel)
-        SheetRow("Walk here", "Tap the plan to stand there in first person", onWalkHere)
-        SheetRow("Trace photo…", "Photo under the plan at 35% opacity", onTrace)
-        Spacer(Modifier.height(16.dp))
+        // iOS AddToolSheet sections: OPENINGS / FURNITURE / STRUCTURE / ANNOTATE (+ walls)
+        AddSectionHeader("WALLS")
+        AddListRow("Interior wall · $intLabel", onDrawWallInterior)
+        AddListRow("Exterior wall · $extLabel", onDrawWallExterior)
+        AddListRow("Room", onDrawRoom)
+        AddSectionHeader("OPENINGS")
+        AddListRow("Door", onDoor)
+        AddListRow("Window", onWindow)
+        AddListRow("French door", onFrench)
+        AddSectionHeader("FURNITURE")
+        AddListRow("Furniture…", onFurniture)
+        AddListRow("Custom furniture", onDrawFurnitureBox)
+        AddSectionHeader("STRUCTURE")
+        AddListRow("Round pillar") { onPlaceStructure(StructureCatalog.pillarRoundID) }
+        AddListRow("Square pillar") { onPlaceStructure(StructureCatalog.pillarSquareID) }
+        AddListRow("Ceiling beam") { onPlaceStructure(StructureCatalog.beamID) }
+        AddListRow("Wall mirror") { onPlaceStructure(StructureCatalog.mirrorID) }
+        AddListRow("Garden path") { onPlaceStructure(StructureCatalog.pathID) }
+        AddListRow("Railing") { onPlaceStructure(StructureCatalog.railingID) }
+        AddListRow("Rug") { onPlaceStructure(StructureCatalog.rugID) }
+        AddSectionHeader("ANNOTATE")
+        AddListRow("Dimension", onDimension)
+        AddListRow("Exterior dims", onExteriorDims)
+        AddListRow("Text label", onPlaceLabel)
+        AddListRow("Walk here", onWalkHere)
+        AddListRow("Trace photo…", onTrace)
+        Spacer(Modifier.height(24.dp))
     }
 }
 
 @Composable
-private fun SheetRow(title: String, subtitle: String, onClick: () -> Unit) {
-    Column(
+private fun AddSectionHeader(title: String) {
+    Text(
+        text = title,
+        color = HdTheme.colors.architectGray,
+        fontFamily = HdMono,
+        fontWeight = FontWeight.SemiBold,
+        fontSize = 10.sp,
+        letterSpacing = 1.sp,
+        modifier = Modifier.padding(start = 4.dp, top = 16.dp, bottom = 6.dp),
+    )
+}
+
+@Composable
+private fun AddListRow(title: String, onClick: () -> Unit) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
+            .clip(RoundedCornerShape(12.dp))
             .background(HdTheme.colors.paper)
-            .border(1.dp, HdTheme.colors.hairline, RoundedCornerShape(14.dp))
             .clickable(onClick = onClick)
-            .padding(16.dp),
+            .padding(horizontal = 14.dp, vertical = 14.dp),
     ) {
-        Text(title, style = HdTheme.typography.titleSmall, color = HdTheme.colors.ink)
-        Text(subtitle, style = HdTheme.typography.bodySmall, color = HdTheme.colors.stone)
+        Box(
+            modifier = Modifier
+                .size(28.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .background(HdTheme.colors.selection.copy(alpha = 0.14f)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                Icons.Outlined.Add,
+                contentDescription = null,
+                tint = HdTheme.colors.selection,
+                modifier = Modifier.size(16.dp),
+            )
+        }
+        Text(
+            text = title,
+            style = HdTheme.typography.titleSmall,
+            color = HdTheme.colors.architectInk,
+            modifier = Modifier
+                .weight(1f)
+                .padding(horizontal = 12.dp),
+        )
+        Text(
+            text = "›",
+            color = HdTheme.colors.architectGray,
+            fontSize = 18.sp,
+            fontWeight = FontWeight.Light,
+        )
     }
 }
 
@@ -1722,35 +1910,69 @@ private fun DockItem(
     onClick: () -> Unit,
     active: Boolean = false,
     ink: Boolean = false,
+    chevron: Boolean = false,
+    badge: String? = null,
+    disabled: Boolean = false,
     content: @Composable () -> Unit,
 ) {
-    // Equal-width slots keep icon + label centered (iOS dock mono labels).
+    // iOS EditorDock.dockButton — 40×30 r9 tile, mono 8 label, minWidth 42
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier
+            .widthIn(min = 42.dp)
             .width(48.dp)
-            .clickable(onClick = onClick)
+            .alpha(if (disabled) 0.35f else 1f)
+            .clickable(enabled = !disabled, onClick = onClick)
             .padding(vertical = 2.dp),
     ) {
         Box(
-            modifier = Modifier
-                .size(width = 40.dp, height = 30.dp)
-                .clip(RoundedCornerShape(9.dp))
-                .background(
-                    when {
-                        ink -> HdTheme.colors.architectInk
-                        active -> HdTheme.colors.selection
-                        else -> Color.Transparent
-                    },
-                ),
+            modifier = Modifier.size(width = 40.dp, height = 30.dp),
             contentAlignment = Alignment.Center,
         ) {
-            content()
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clip(RoundedCornerShape(9.dp))
+                    .background(
+                        when {
+                            ink -> HdTheme.colors.architectInk
+                            active -> HdTheme.colors.selection
+                            else -> Color.Transparent
+                        },
+                    ),
+            ) {
+                content()
+                if (chevron) {
+                    Icon(
+                        Icons.Outlined.KeyboardArrowDown,
+                        contentDescription = null,
+                        tint = if (ink || active) HdTheme.colors.paper else HdTheme.colors.architectInk,
+                        modifier = Modifier.size(10.dp),
+                    )
+                }
+            }
+            if (badge != null) {
+                Text(
+                    text = badge,
+                    color = Color.White,
+                    fontSize = 7.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .offset(x = 5.dp, y = (-3).dp)
+                        .clip(RoundedCornerShape(3.dp))
+                        .background(HdTheme.colors.selection)
+                        .padding(horizontal = 3.dp, vertical = 1.dp),
+                )
+            }
         }
         Spacer(Modifier.height(3.dp))
         Text(
             text = label,
-            color = HdTheme.colors.architectGray,
+            color = if (active || ink) HdTheme.colors.architectInk else HdTheme.colors.architectGray,
+            fontFamily = HdMono,
             fontSize = 8.sp,
             lineHeight = 10.sp,
             maxLines = 1,

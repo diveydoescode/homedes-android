@@ -7,6 +7,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.unit.Dp
@@ -37,8 +38,9 @@ fun rememberHdLayerBackdrop(paper: Color = HdTheme.colors.paper): LayerBackdrop 
 }
 
 /**
- * Liquid Glass chrome surface (iOS Layer 2). Uses Kyant Backdrop on API 33+;
- * falls back to frosted ivory Material fill on older devices.
+ * Liquid Glass chrome surface (iOS Layer 2 / HDGlassBackground).
+ * Kyant Backdrop on API 33+; frosted ivory fallback below.
+ * Soft shadow + hairline rule mirror iOS elevation + shine.
  */
 fun Modifier.hdGlassChrome(
     backdrop: Backdrop?,
@@ -47,11 +49,19 @@ fun Modifier.hdGlassChrome(
     blurRadius: Dp = 4.dp,
     lensRadius: Dp = 16.dp,
     lensHeight: Dp = 32.dp,
-    borderColor: Color = Color.Black.copy(alpha = 0.08f),
+    borderColor: Color = Color.Black.copy(alpha = 0.10f),
     fallbackFill: Color = Color.White.copy(alpha = 0.88f),
+    elevation: Dp = 4.dp,
 ): Modifier {
+    val base = this.shadow(
+        elevation = elevation,
+        shape = shape,
+        clip = false,
+        ambientColor = Color.Black.copy(alpha = 0.06f),
+        spotColor = Color.Black.copy(alpha = 0.08f),
+    )
     return if (liquidGlassSupported && backdrop != null) {
-        this
+        base
             .drawBackdrop(
                 backdrop = backdrop,
                 shape = { shape },
@@ -66,14 +76,14 @@ fun Modifier.hdGlassChrome(
             )
             .border(0.5.dp, borderColor, shape)
     } else {
-        this
+        base
             .clip(shape)
             .background(fallbackFill, shape)
             .border(0.5.dp, borderColor, shape)
     }
 }
 
-/** Capsule dock / FAB glass (999 radius). */
+/** Capsule dock / FAB glass (999 radius) — iOS EditorDock elevation 6. */
 fun Modifier.hdGlassCapsule(
     backdrop: Backdrop?,
     surfaceAlpha: Float = 0.50f,
@@ -86,4 +96,5 @@ fun Modifier.hdGlassCapsule(
     lensRadius = 12.dp,
     lensHeight = 24.dp,
     fallbackFill = fallbackFill,
+    elevation = 6.dp,
 )
