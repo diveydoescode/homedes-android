@@ -4,9 +4,13 @@ import com.homedesign.android.domain.geom.ArcWallGeometry
 import com.homedesign.android.domain.geom.OpeningSymbol
 import com.homedesign.android.domain.geom.OpeningSymbolKind
 import com.homedesign.android.domain.geom.OpeningSwing
+import com.homedesign.android.domain.geom.PolygonTriangulator
+import com.homedesign.android.domain.geom.StaircaseCutout
+import com.homedesign.android.domain.geom.Vec2
 import com.homedesign.android.domain.geom.WallGeometry
 import com.homedesign.android.domain.geom.WallSegmentation
 import com.homedesign.android.domain.geom.WallSegment
+import com.homedesign.android.domain.geom.vec
 import com.homedesign.android.domain.model.Home
 import com.homedesign.android.domain.model.HomeDoorOrWindow
 import com.homedesign.android.domain.model.HomePieceOfFurniture
@@ -14,6 +18,7 @@ import com.homedesign.android.domain.model.Wall
 import com.homedesign.android.domain.model.WallTexture
 import com.homedesign.android.domain.textures.findPreset
 import com.homedesign.android.domain.textures.presetAssetPath
+import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.hypot
 import kotlin.math.max
@@ -51,6 +56,8 @@ data class DoorLeaf3D(
     val closedYawRad: Float,
     /** Signed max swing from closed (radians). */
     val swingRad: Float,
+    /** When true, leaf sits at full swing; when false, closed. */
+    val isOpen: Boolean = false,
 )
 
 data class ExtrudeOptions(
@@ -136,6 +143,7 @@ object HomeExtrusion {
                     textureAssetPath = tex?.first,
                     tileWidthCM = tex?.second ?: 100.0,
                     tileHeightCM = tex?.third ?: 100.0,
+                    holes = StaircaseCutout.floorHoles(room, home),
                 ),
             )
         }
@@ -785,6 +793,7 @@ object HomeExtrusion {
             hingeZ = (hinge.y * CM_TO_M).toFloat(),
             closedYawRad = yaw,
             swingRad = OpeningSwing.signedSwingRadians(dw).toFloat(),
+            isOpen = dw.isOpen,
         )
     }
 
@@ -811,6 +820,7 @@ object HomeExtrusion {
             hingeZ = (arc.center.y * CM_TO_M).toFloat(),
             closedYawRad = arc.startAngle.toFloat(),
             swingRad = swing,
+            isOpen = dw.isOpen,
         )
     }
 
@@ -1024,6 +1034,7 @@ object HomeExtrusion {
         textureAssetPath: String? = null,
         tileWidthCM: Double = 100.0,
         tileHeightCM: Double = 100.0,
+        holes: List<List<Vec2>> = emptyList(),
     ): MeshTri {
         val pos = ArrayList<Float>()
         val nrm = ArrayList<Float>()
@@ -1034,16 +1045,48 @@ object HomeExtrusion {
             uvs?.add(world[0] / tileWm)
             uvs?.add(world[2] / tileHm)
         }
-        val c0 = pts[0]
-        for (i in 1 until pts.size - 1) {
-            val a = planToWorld(c0.first, c0.second, 0.0)
-            val b = planToWorld(pts[i].first, pts[i].second, 0.0)
-            val c = planToWorld(pts[i + 1].first, pts[i + 1].second, 0.0)
+        fun emitWorld(a: FloatArray, b: FloatArray, c: FloatArray) {
             pos.addAll(a.toList()); pos.addAll(b.toList()); pos.addAll(c.toList())
             pushUv(a); pushUv(b); pushUv(c)
             repeat(3) {
                 nrm.add(0f); nrm.add(1f); nrm.add(0f)
             }
+        }
+        fun emitPlan(ax: Double, ay: Double, bx: Double, by: Double, cx: Double, cy: Double) {
+            emitWorld(
+                planToWorld(ax, ay, 0.0),
+                planToWorld(bx, by, 0.0),
+                planToWorld(cx, cy, 0.0),
+            )
+        }
+        fun emitFan() {
+            val c0 = pts[0]
+            for (i in 1 until pts.size - 1) {
+                emitPlan(
+                    c0.first, c0.second,
+                    pts[i].first, pts[i].second,
+                    pts[i + 1].first, pts[i + 1].second,
+                )
+            }
+        }
+        val usableHoles = holes.filter { it.size >= 3 }
+        if (usableHoles.isNotEmpty()) {
+            val outer = pts.map { vec(it.first, it.second) }
+            val (positions, indices) = PolygonTriangulator.triangulate(outer, usableHoles)
+            if (holeTriangulationUsable(outer, usableHoles, positions, indices)) {
+                var k = 0
+                while (k < indices.size) {
+                    val a = positions[indices[k]]
+                    val b = positions[indices[k + 1]]
+                    val c = positions[indices[k + 2]]
+                    emitPlan(a.x, a.y, b.x, b.y, c.x, c.y)
+                    k += 3
+                }
+            } else {
+                emitFan()
+            }
+        } else {
+            emitFan()
         }
         return MeshTri(
             positions = pos.toFloatArray(),
@@ -1053,6 +1096,34 @@ object HomeExtrusion {
             uvs = uvs?.toFloatArray(),
             textureAssetPath = textureAssetPath,
         )
+    }
+
+    /** Accept hole triangulation only when it covers outer − holes (±tolerance). */
+    private fun holeTriangulationUsable(
+        outer: List<Vec2>,
+        holes: List<List<Vec2>>,
+        positions: List<Vec2>,
+        indices: List<Int>,
+    ): Boolean {
+        if (indices.size < 3 || indices.size % 3 != 0) return false
+        if (positions.size < 3) return false
+        for (idx in indices) {
+            if (idx < 0 || idx >= positions.size) return false
+        }
+        val outerArea = abs(PolygonTriangulator.signedArea(outer)) / 2.0
+        val holeArea = holes.sumOf { abs(PolygonTriangulator.signedArea(it)) / 2.0 }
+        var triArea = 0.0
+        var k = 0
+        while (k < indices.size) {
+            val a = positions[indices[k]]
+            val b = positions[indices[k + 1]]
+            val c = positions[indices[k + 2]]
+            triArea += abs((b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x)) / 2.0
+            k += 3
+        }
+        val expected = (outerArea - holeArea).coerceAtLeast(0.0)
+        val tol = max(50.0, 0.15 * holeArea)
+        return abs(triArea - expected) <= tol
     }
 
     /**

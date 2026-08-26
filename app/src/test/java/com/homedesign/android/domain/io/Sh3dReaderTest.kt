@@ -1,6 +1,7 @@
 package com.homedesign.android.domain.io
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -41,6 +42,8 @@ class SH3DReaderTest {
                 <point x='0' y='80'/>
               </room>
               <pieceOfFurniture id='p1' name='Chair' x='40' y='40' width='50' depth='50' height='80'/>
+              <pieceOfFurniture id='s1' name='Staircase' x='20' y='20' width='90' depth='240' height='250'
+                staircaseCutOutShape='M0,0 1,0 1,1 0,1 z'/>
             </home>
         """.trimIndent().toByteArray()
         val home = SH3DReader.parseHomeXml(xml)
@@ -48,8 +51,10 @@ class SH3DReaderTest {
         assertEquals(2, home.walls.size)
         assertEquals(1, home.rooms.size)
         assertEquals(4, home.rooms[0].points.size)
-        assertEquals(1, home.furniture.size)
+        assertEquals(2, home.furniture.size)
         assertEquals(HomeFactorySynthLevel, home.walls[0].level)
+        assertNull(home.furniture.first { it.id == "p1" }.staircaseCutOut)
+        assertEquals(true, home.furniture.first { it.id == "s1" }.staircaseCutOut)
     }
 
     companion object {

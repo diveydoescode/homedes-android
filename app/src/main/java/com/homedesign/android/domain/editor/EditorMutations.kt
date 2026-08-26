@@ -325,6 +325,7 @@ fun applyPlaceFurniture(home: Home, entry: CatalogEntry, x: Double, y: Double): 
         modelMirrored = false,
         level = home.selectedLevelID,
         lightPower = if (entry.category == "Lighting" || entry.category == "Lights") 0.5 else null,
+        staircaseCutOut = if (entry.category == "Staircases") true else null,
     )
     FurnitureSnap.snapToWall(piece, wallsOnLevel(home))?.let { snapped ->
         piece = piece.copy(x = snapped.x, y = snapped.y, angle = snapped.angle)
