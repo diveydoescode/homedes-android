@@ -1,6 +1,7 @@
 package com.homedesign.android.presentation.editor
 
 import android.content.Intent
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -75,6 +76,7 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
@@ -103,6 +105,11 @@ private val SidePanelMinWidth = 672.dp
 private val SidePanelWidth = 360.dp
 /** Side-by-side 2D+3D Split chip is offered at/above this width. */
 private val SplitViewMinWidth = 900.dp
+/**
+ * Clearance below status bars for floating tip/trace/place banners.
+ * Two-row top chrome (title row + mode/units row) needs more than a single toolbar.
+ */
+private val TopChromeClearance = 112.dp
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -213,6 +220,18 @@ fun EditorScreen(
     val focusRequester = remember { FocusRequester() }
     LaunchedEffect(Unit) { focusRequester.requestFocus() }
 
+    // Back priority (last registered wins): dismiss sheets → clear selection → leave editor.
+    BackHandler(enabled = hasSelection) {
+        viewModel.clearSelection()
+    }
+    BackHandler(enabled = showAdd) {
+        showAdd = false
+    }
+    BackHandler(enabled = showCatalog) {
+        showCatalog = false
+        catalogReplaceMode = false
+    }
+
     BoxWithConstraints(
         modifier = Modifier
             .fillMaxSize()
@@ -279,7 +298,7 @@ fun EditorScreen(
                     Modifier
                         .fillMaxSize()
                         .padding(
-                            top = 64.dp,
+                            top = TopChromeClearance,
                             bottom = 100.dp,
                             end = if (sidePanel && hasSelection && state.tool is EditorTool.Select) {
                                 SidePanelWidth + 24.dp
@@ -379,7 +398,7 @@ fun EditorScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(
-                        top = 64.dp,
+                        top = TopChromeClearance,
                         bottom = 100.dp,
                         end = if (sidePanel && hasSelection && state.tool is EditorTool.Select) {
                             SidePanelWidth + 24.dp
@@ -392,10 +411,13 @@ fun EditorScreen(
 
         Column(
             modifier = Modifier
+                .align(Alignment.TopCenter)
                 .fillMaxWidth()
                 .statusBarsPadding()
                 .padding(horizontal = 8.dp, vertical = 6.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
+            // Title row: keep back / title / undo / floor / file visible on phone widths.
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -420,22 +442,15 @@ fun EditorScreen(
                         text = state.title.ifBlank { "Untitled" },
                         style = HdTheme.typography.titleMedium,
                         color = HdTheme.colors.architectInk,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                     )
                     Text(
                         text = state.savedLabel,
                         style = HdTheme.typography.labelSmall,
                         color = HdTheme.colors.architectGray,
-                    )
-                }
-                ViewModeChips(
-                    selected = state.viewMode,
-                    onSelect = viewModel::setViewMode,
-                    showSplit = splitAvailable,
-                )
-                if (showPlanChrome) {
-                    UnitSystemChips(
-                        selected = state.unitSystem,
-                        onSelect = viewModel::setUnitSystem,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                     )
                 }
                 IconButton(onClick = viewModel::undo, enabled = state.canUndo) {
@@ -567,6 +582,29 @@ fun EditorScreen(
                     }
                 }
             }
+            // Mode / units row — separate so phone widths keep title + floor + file visible.
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(HdTheme.colors.ivory.copy(alpha = 0.92f))
+                    .border(1.dp, HdTheme.colors.hairline, RoundedCornerShape(16.dp))
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                ViewModeChips(
+                    selected = state.viewMode,
+                    onSelect = viewModel::setViewMode,
+                    showSplit = splitAvailable,
+                )
+                if (showPlanChrome) {
+                    UnitSystemChips(
+                        selected = state.unitSystem,
+                        onSelect = viewModel::setUnitSystem,
+                    )
+                }
+            }
         }
 
         if (showPlanChrome &&
@@ -579,7 +617,7 @@ fun EditorScreen(
                 modifier = Modifier
                     .align(Alignment.TopCenter)
                     .statusBarsPadding()
-                    .padding(top = 72.dp, start = 16.dp, end = 16.dp),
+                    .padding(top = TopChromeClearance, start = 16.dp, end = 16.dp),
             )
         }
 
@@ -592,7 +630,7 @@ fun EditorScreen(
                     modifier = Modifier
                         .align(Alignment.TopCenter)
                         .statusBarsPadding()
-                        .padding(top = 72.dp),
+                        .padding(top = TopChromeClearance),
                 )
             }
         }
@@ -705,7 +743,7 @@ fun EditorScreen(
                 modifier = Modifier
                     .align(Alignment.TopCenter)
                     .statusBarsPadding()
-                    .padding(top = 72.dp),
+                    .padding(top = TopChromeClearance),
             )
         }
 
@@ -715,7 +753,7 @@ fun EditorScreen(
                 modifier = Modifier
                     .align(Alignment.TopCenter)
                     .statusBarsPadding()
-                    .padding(top = 72.dp),
+                    .padding(top = TopChromeClearance),
             )
         }
 
@@ -728,7 +766,7 @@ fun EditorScreen(
                     modifier = Modifier
                         .align(Alignment.TopEnd)
                         .statusBarsPadding()
-                        .padding(top = 72.dp, end = 12.dp, bottom = 108.dp)
+                        .padding(top = TopChromeClearance, end = 12.dp, bottom = 108.dp)
                         .width(SidePanelWidth)
                         .fillMaxHeight()
                         .clip(RoundedCornerShape(16.dp))
