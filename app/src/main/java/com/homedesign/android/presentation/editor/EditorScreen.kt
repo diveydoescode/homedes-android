@@ -18,11 +18,13 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -82,8 +84,10 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -640,15 +644,17 @@ fun EditorScreen(
         if (showPlanChrome) Row(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
+                .fillMaxWidth()
                 .navigationBarsPadding()
+                .padding(horizontal = 10.dp)
                 .padding(bottom = 16.dp)
                 .hdGlassCapsule(
                     backdrop = glassBackdrop,
                     fallbackFill = HdTheme.colors.ivory.copy(alpha = 0.94f),
                 )
-                .padding(horizontal = 10.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-            verticalAlignment = Alignment.CenterVertically,
+                .padding(horizontal = 6.dp, vertical = 7.dp),
+            horizontalArrangement = Arrangement.SpaceEvenly,
+            verticalAlignment = Alignment.Top,
         ) {
             // iOS EditorDock: Edit⇄Measure · Add · Catalog · Sketch · Walk · Undo · Redo
             val measure = state.tool is EditorTool.Dimension
@@ -878,16 +884,19 @@ fun EditorScreen(
                     )
                 }
             } else {
+                // Phone: peek sheet — cap height so the plan stays visible (iOS inspector).
                 Box(
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
                         .navigationBarsPadding()
                         .padding(start = 12.dp, end = 12.dp, bottom = 108.dp)
                         .fillMaxWidth()
+                        .heightIn(max = 280.dp)
+                        .wrapContentHeight(align = Alignment.Bottom)
                         .clip(RoundedCornerShape(18.dp))
                         .background(HdTheme.colors.ivory.copy(alpha = 0.96f))
                         .border(1.dp, HdTheme.colors.hairline, RoundedCornerShape(18.dp))
-                        .padding(12.dp),
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
                 ) {
                     PropertySheetContent(
                         state = state,
@@ -1428,11 +1437,11 @@ private fun DockItem(
     ink: Boolean = false,
     content: @Composable () -> Unit,
 ) {
-    // iOS dock buttons are ~42pt wide so seven tools fit a phone strip.
+    // Equal-width slots keep icon + label centered (iOS dock mono labels).
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier
-            .width(46.dp)
+            .width(48.dp)
             .clickable(onClick = onClick)
             .padding(vertical = 2.dp),
     ) {
@@ -1452,6 +1461,18 @@ private fun DockItem(
             content()
         }
         Spacer(Modifier.height(3.dp))
-        Text(label, style = HdTheme.typography.labelSmall, color = HdTheme.colors.architectGray)
+        Text(
+            text = label,
+            color = HdTheme.colors.architectGray,
+            fontSize = 8.sp,
+            lineHeight = 10.sp,
+            maxLines = 1,
+            softWrap = false,
+            overflow = TextOverflow.Clip,
+            textAlign = TextAlign.Center,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(12.dp),
+        )
     }
 }
